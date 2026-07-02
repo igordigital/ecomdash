@@ -1,84 +1,93 @@
 import Link from "next/link";
-import { MerChart, SpendRevenueChart } from "../components/charts";
-import { Badge, Card, Funnel, PageHeader, SectionTitle, ShareBar, StatCard } from "../components/ui";
-import { fmtPct, fmtRatio, fmtUsd, fmtUsdCompact, fmtNum } from "../lib/format";
+import { MetricTrend, SpendRevenueChart } from "../components/charts";
+import { RangeSelector } from "../components/range-selector";
+import {
+  Badge,
+  Card,
+  Funnel,
+  MultiWindowStat,
+  PageHeader,
+  SectionTitle,
+  ShareBar,
+  StatCard,
+} from "../components/ui";
+import { fmtNum, fmtPct, fmtRatio, fmtUsd, fmtUsdCompact } from "../lib/format";
+import { rangeQueryString, resolveRange, type RangeSearchParams } from "../lib/range";
 import {
   MER_TARGET,
   getAnomalies,
+  getEarliestDate,
+  getLatestDate,
   getMerSeries,
   getNetworkKpis,
   getOverviewKpis,
+  getRollingWindows,
   getSiteFunnel,
   getStoreKpis,
 } from "../lib/mock";
 
-export default function OverviewPage() {
-  const kpis = getOverviewKpis();
-  const store = getStoreKpis();
-  const series = getMerSeries();
-  const meta = getNetworkKpis("meta");
-  const google = getNetworkKpis("google");
-  const funnel = getSiteFunnel();
-  const topAnomalies = getAnomalies().slice(0, 3);
+export default async function OverviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<RangeSearchParams>;
+}) {
+  const earliestDate = getEarliestDate();
+  const latestDate = getLatestDate();
+  const range = resolveRange(await searchParams, { earliest: earliestDate, latest: latestDate });
+
+  const rolling = getRollingWindows();
+  const kpis = getOverviewKpis(range);
+  const store = getStoreKpis(range);
+  const series = getMerSeries(range);
+  const meta = getNetworkKpis("meta", range);
+  const google = getNetworkKpis("google", range);
+  const funnel = getSiteFunnel(range);
+  const topAnomalies = getAnomalies(range).slice(0, 3);
 
   return (
     <>
       <PageHeader
         title="Overview"
-        description="Blended efficiency anchored to store truth, last 28 days vs the prior 28. MER credits all revenue, including organic, email, and direct, to paid spend. That is intentional."
+        description="Blended efficiency anchored to store truth. MER credits all revenue, including organic, email, and direct, to paid spend. That is intentional."
+        right={<RangeSelector current={range} pathname="/" earliestDate={earliestDate} latestDate={latestDate} />}
       />
 
-      <SectionTitle hint="MER = store net revenue / total ad spend across platforms.">
-        Efficiency
+      <SectionTitle hint="Always anchored to the latest complete day. Independent of the range selector above.">
+        Rolling KPIs
+      </SectionTitle>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MultiWindowStat label="MER" points={rolling.mer} spark={rolling.merSpark} format={fmtRatio} sparkColor="#a78bfa" />
+        <MultiWindowStat label="Ad spend" points={rolling.spend} spark={rolling.spendSpark} format={fmtUsdCompact} sparkColor="#38bdf8" />
+        <MultiWindowStat
+          label="Store net revenue"
+          points={rolling.revenue}
+          spark={rolling.revenueSpark}
+          format={fmtUsdCompact}
+          sparkColor="#f59e0b"
+        />
+        <MultiWindowStat label="Orders" points={rolling.orders} spark={rolling.ordersSpark} format={fmtNum} sparkColor="#34d399" />
+      </div>
+
+      <SectionTitle hint={`${range.label}, ${range.compareLabel}. Set by the range selector above.`}>
+        Efficiency and store
       </SectionTitle>
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatCard
-          label="MER 7d"
-          value={fmtRatio(kpis.mer7)}
-          current={kpis.mer7}
-          previous={kpis.mer7Prev}
-          spark={kpis.sparkMer7}
-          sparkColor="#a78bfa"
+          label="MER"
+          value={fmtRatio(kpis.mer)}
+          current={kpis.mer}
+          previous={kpis.merPrev}
           hint={`target ${MER_TARGET.toFixed(1)}`}
-          accent={kpis.mer7 >= MER_TARGET}
+          accent={kpis.mer >= MER_TARGET}
         />
+        <StatCard label="Ad spend" value={fmtUsdCompact(kpis.spend)} current={kpis.spend} previous={kpis.spendPrev} />
         <StatCard
-          label="MER 28d"
-          value={fmtRatio(kpis.mer28)}
-          current={kpis.mer28}
-          previous={kpis.mer28Prev}
-          hint={`target ${MER_TARGET.toFixed(1)}`}
-          accent={kpis.mer28 >= MER_TARGET}
+          label="Store net revenue"
+          value={fmtUsdCompact(kpis.revenue)}
+          current={kpis.revenue}
+          previous={kpis.revenuePrev}
         />
-        <StatCard
-          label="Ad spend 28d"
-          value={fmtUsdCompact(kpis.spend28)}
-          current={kpis.spend28}
-          previous={kpis.spend28Prev}
-          spark={kpis.sparkSpend}
-          hint="vs prior 28d"
-        />
-        <StatCard
-          label="Store net revenue 28d"
-          value={fmtUsdCompact(kpis.revenue28)}
-          current={kpis.revenue28}
-          previous={kpis.revenue28Prev}
-          spark={kpis.sparkRevenue}
-          sparkColor="#f59e0b"
-          hint="vs prior 28d"
-        />
-      </div>
-
-      <SectionTitle hint="Store truth from Shopify orders, last 28 days.">Store</SectionTitle>
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <StatCard
-          label="Orders"
-          value={fmtNum(store.cur.orders)}
-          current={store.cur.orders}
-          previous={store.prev.orders}
-          spark={kpis.sparkOrders}
-          sparkColor="#34d399"
-        />
+        <StatCard label="Orders" value={fmtNum(kpis.orders)} current={kpis.orders} previous={kpis.ordersPrev} />
         <StatCard label="AOV" value={fmtUsd(store.cur.aov)} current={store.cur.aov} previous={store.prev.aov} />
         <StatCard
           label="New customer orders"
@@ -93,6 +102,13 @@ export default function OverviewPage() {
           previous={store.prev.refundRate}
           invert
         />
+        <StatCard
+          label="Discount rate"
+          value={fmtPct(store.cur.discountRate)}
+          current={store.cur.discountRate}
+          previous={store.prev.discountRate}
+          invert
+        />
       </div>
 
       <SectionTitle>Trends</SectionTitle>
@@ -103,8 +119,14 @@ export default function OverviewPage() {
         >
           <SpendRevenueChart data={series} />
         </Card>
-        <Card title="Rolling MER vs target" subtitle="7 and 28 day windows, restated as platforms revise attribution.">
-          <MerChart data={series} target={MER_TARGET} />
+        <Card title={`Rolling MER (${range.label.toLowerCase()} window) vs target`} subtitle="Restated as platforms revise attribution.">
+          <MetricTrend
+            data={series}
+            series={[{ key: "mer", name: "MER", color: "#a78bfa" }]}
+            fmt="ratio"
+            target={MER_TARGET}
+            targetLabel={`target ${MER_TARGET.toFixed(1)}`}
+          />
         </Card>
       </div>
 
@@ -112,7 +134,7 @@ export default function OverviewPage() {
         Networks
       </SectionTitle>
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Spend split, 28d">
+        <Card title="Spend split">
           <ShareBar
             items={[
               { label: "Meta", value: meta.cur.spend, color: "#38bdf8" },
@@ -127,7 +149,7 @@ export default function OverviewPage() {
               <div key={name} className="rounded border border-slate-800 p-3">
                 <div className="flex items-center justify-between">
                   <p className="font-medium text-slate-200">{name}</p>
-                  <Link href={href} className="text-xs text-sky-400 hover:underline">
+                  <Link href={`${href}?${rangeQueryString(range)}`} className="text-xs text-sky-400 hover:underline">
                     Deep dive
                   </Link>
                 </div>
@@ -156,31 +178,40 @@ export default function OverviewPage() {
           </div>
         </Card>
 
-        <Card title="Site funnel, 28d" subtitle="Sessions to orders, all traffic. Full view on the Funnel page.">
+        <Card title="Site funnel" subtitle="Full view on the Funnel page.">
           <Funnel stages={funnel} />
         </Card>
       </div>
 
       <SectionTitle>Flags</SectionTitle>
-      <Card subtitle="Ranked by absolute spend or revenue impact.">
-        <ul className="divide-y divide-slate-800">
-          {topAnomalies.map((a) => (
-            <li key={`${a.date}-${a.scope}`} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
-              <Badge tone={a.kind === "mer_move" ? "bad" : a.kind === "conv_rate_drop" ? "warn" : "info"}>
-                {a.kind.replace(/_/g, " ")}
-              </Badge>
-              <div className="min-w-0">
-                <p className="text-sm text-slate-200">
-                  {a.scope} <span className="text-slate-500">| {a.date}</span>
-                </p>
-                <p className="mt-0.5 line-clamp-2 text-xs text-slate-400">{a.narrative}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-        <Link href="/anomalies" className="mt-3 inline-block text-xs text-sky-400 hover:underline">
-          All flags
-        </Link>
+      <Card subtitle="Ranked by absolute spend or revenue impact, within the selected range.">
+        {topAnomalies.length > 0 ? (
+          <>
+            <ul className="divide-y divide-slate-800">
+              {topAnomalies.map((a) => (
+                <li key={`${a.date}-${a.scope}`} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+                  <Badge tone={a.kind === "mer_move" ? "bad" : a.kind === "conv_rate_drop" ? "warn" : "info"}>
+                    {a.kind.replace(/_/g, " ")}
+                  </Badge>
+                  <div className="min-w-0">
+                    <p className="text-sm text-slate-200">
+                      {a.scope} <span className="text-slate-500">| {a.date}</span>
+                    </p>
+                    <p className="mt-0.5 line-clamp-2 text-xs text-slate-400">{a.narrative}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <Link
+              href={`/anomalies?${rangeQueryString(range)}`}
+              className="mt-3 inline-block text-xs text-sky-400 hover:underline"
+            >
+              All flags
+            </Link>
+          </>
+        ) : (
+          <p className="text-sm text-slate-500">No flags in the selected range.</p>
+        )}
       </Card>
     </>
   );

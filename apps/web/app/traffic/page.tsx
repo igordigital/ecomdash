@@ -1,27 +1,32 @@
 import { TrafficChart } from "../../components/charts";
+import { RangeSelector } from "../../components/range-selector";
 import { Card, PageHeader } from "../../components/ui";
 import { fmtDuration, fmtNum, fmtPct } from "../../lib/format";
-import { CHANNELS, getChannelSummaries, getTrafficSeries } from "../../lib/mock";
+import { resolveRange, type RangeSearchParams } from "../../lib/range";
+import { CHANNELS, getChannelSummaries, getEarliestDate, getLatestDate, getTrafficSeries } from "../../lib/mock";
 
-export default function TrafficPage() {
-  const series = getTrafficSeries();
-  const channels = getChannelSummaries();
+export default async function TrafficPage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
+  const earliestDate = getEarliestDate();
+  const latestDate = getLatestDate();
+  const range = resolveRange(await searchParams, { earliest: earliestDate, latest: latestDate });
+  const series = getTrafficSeries(range);
+  const channels = getChannelSummaries(range);
 
   return (
     <>
       <PageHeader
         title="Site traffic"
         description="Session and engagement health from GA4, by default channel grouping. No crosswalk involved: this is what the site is actually doing, regardless of attribution."
+        right={<RangeSelector current={range} pathname="/traffic" earliestDate={earliestDate} latestDate={latestDate} />}
       />
 
-      <Card title="Daily sessions by channel" subtitle="Last 90 days, stacked.">
+      <Card title="Daily sessions by channel" subtitle="Trailing context window around the selected range, stacked.">
         <TrafficChart data={series} channels={CHANNELS} />
       </Card>
 
       <div className="mt-4">
-        <Card subtitle="Last 28 days per channel.">
-          <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-sm">
+        <Card subtitle={`${range.label}, per channel.`}>
+          <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-800 text-left text-xs uppercase tracking-wide text-slate-500">
                 <th className="pb-2 pr-4 font-medium">Channel</th>
@@ -45,7 +50,6 @@ export default function TrafficPage() {
               ))}
             </tbody>
           </table>
-          </div>
         </Card>
       </div>
     </>

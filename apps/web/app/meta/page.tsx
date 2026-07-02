@@ -1,4 +1,5 @@
 import { MetricTrend } from "../../components/charts";
+import { RangeSelector } from "../../components/range-selector";
 import {
   Badge,
   Card,
@@ -10,9 +11,12 @@ import {
   StatCard,
 } from "../../components/ui";
 import { fmtNum, fmtNumCompact, fmtPct, fmtRatio, fmtUsd, fmtUsdCompact } from "../../lib/format";
+import { resolveRange, type RangeSearchParams } from "../../lib/range";
 import {
   getCampaignHealth,
   getCreativeBreakdown,
+  getEarliestDate,
+  getLatestDate,
   getMetaAds,
   getNetworkFunnel,
   getNetworkKpis,
@@ -27,30 +31,46 @@ const CREATIVE_COLORS: Record<string, string> = {
   "Brand video": "#f472b6",
 };
 
-export default function MetaPage() {
-  const { cur, prev, trend, sparkSpend, sparkCtr, sparkCpm, sparkRoas } = getNetworkKpis("meta");
-  const funnel = getNetworkFunnel("meta");
-  const creatives = getCreativeBreakdown();
-  const campaigns = getCampaignHealth().filter((c) => c.platform === "meta");
-  const ads = getMetaAds();
-  const matchRate = getUtmMatchRate();
+export default async function MetaPage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
+  const earliestDate = getEarliestDate();
+  const latestDate = getLatestDate();
+  const range = resolveRange(await searchParams, { earliest: earliestDate, latest: latestDate });
+
+  const { cur, prev, trend, sparkSpend, sparkCtr, sparkCpm, sparkRoas } = getNetworkKpis("meta", range);
+  const funnel = getNetworkFunnel("meta", range);
+  const creatives = getCreativeBreakdown(range);
+  const campaigns = getCampaignHealth(range).filter((c) => c.platform === "meta");
+  const ads = getMetaAds(range);
+  const matchRate = getUtmMatchRate(range);
 
   return (
     <>
       <PageHeader
         title="Meta"
-        description="Network deep dive, last 28 days vs prior 28. Conversions, values, CPA and ROAS are Meta's own attribution (7d click, 1d view): diagnostic, never added to other platforms."
-        right={<Badge tone="warn">platform reported</Badge>}
+        description="Network deep dive. Conversions, values, CPA and ROAS are Meta's own attribution (7d click, 1d view): diagnostic, never added to other platforms."
+        right={
+          <div className="flex items-center gap-2">
+            <Badge tone="warn">platform reported</Badge>
+            <RangeSelector current={range} pathname="/meta" earliestDate={earliestDate} latestDate={latestDate} />
+          </div>
+        }
       />
 
-      <SectionTitle>Network KPIs</SectionTitle>
+      <SectionTitle hint={`${range.label}, ${range.compareLabel}.`}>Network KPIs</SectionTitle>
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatCard label="Spend" value={fmtUsdCompact(cur.spend)} current={cur.spend} previous={prev.spend} spark={sparkSpend} />
         <StatCard label="CPM" value={fmtUsd(cur.cpm)} current={cur.cpm} previous={prev.cpm} invert spark={sparkCpm} sparkColor="#f59e0b" />
         <StatCard label="CPC" value={`$${cur.cpc.toFixed(2)}`} current={cur.cpc} previous={prev.cpc} invert />
         <StatCard label="CTR" value={fmtPct(cur.ctr)} current={cur.ctr} previous={prev.ctr} spark={sparkCtr} sparkColor="#34d399" />
         <StatCard label="Reach" value={fmtNumCompact(cur.reach)} current={cur.reach} previous={prev.reach} />
-        <StatCard label="Frequency" value={cur.frequency.toFixed(1)} current={cur.frequency} previous={prev.frequency} invert hint="avg per day" />
+        <StatCard
+          label="Frequency"
+          value={cur.frequency.toFixed(1)}
+          current={cur.frequency}
+          previous={prev.frequency}
+          invert
+          hint="avg per day"
+        />
         <StatCard
           label="CPA (diag)"
           value={cur.cpa !== null ? fmtUsd(cur.cpa) : "n/a"}
@@ -96,7 +116,7 @@ export default function MetaPage() {
       </div>
 
       <SectionTitle>Funnel</SectionTitle>
-      <Card subtitle="Meta reported events, 28d, deltas vs prior 28d.">
+      <Card subtitle={`Meta reported events, ${range.label.toLowerCase()}, deltas ${range.compareLabel}.`}>
         <Funnel stages={funnel} />
       </Card>
 
@@ -177,9 +197,7 @@ export default function MetaPage() {
         </div>
       </Card>
 
-      <SectionTitle hint="Frequency 6.0 or higher is highlighted: retargeting fatigue territory.">
-        Ads
-      </SectionTitle>
+      <SectionTitle hint="Frequency 6.0 or higher is highlighted: retargeting fatigue territory.">Ads</SectionTitle>
       <Card>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px] text-sm">

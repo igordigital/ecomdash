@@ -71,50 +71,27 @@ export function SpendRevenueChart({ data }: { data: MerPoint[] }) {
   );
 }
 
-export function MerChart({ data, target }: { data: MerPoint[]; target?: number }) {
-  return (
-    <ResponsiveContainer width="100%" height={240}>
-      <LineChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
-        <CartesianGrid {...GRID} />
-        <XAxis dataKey="date" tickFormatter={shortDate} {...AXIS} tickLine={false} minTickGap={40} />
-        <YAxis {...AXIS} tickLine={false} domain={["auto", "auto"]} tickFormatter={AXIS_FMT.ratio} />
-        <Tooltip
-          contentStyle={TOOLTIP_STYLE}
-          labelStyle={{ color: "#94a3b8" }}
-          formatter={(value, name) => [Number(value).toFixed(2), String(name)]}
-        />
-        {target !== undefined ? (
-          <ReferenceLine
-            y={target}
-            stroke="#f59e0b"
-            strokeDasharray="6 4"
-            label={{ value: `target ${target.toFixed(1)}`, fill: "#f59e0b", fontSize: 11, position: "insideTopRight" }}
-          />
-        ) : null}
-        <Line dataKey="mer7" name="MER 7d" type="monotone" stroke="#a78bfa" strokeWidth={2} dot={false} connectNulls />
-        <Line dataKey="mer28" name="MER 28d" type="monotone" stroke="#38bdf8" strokeWidth={2} dot={false} connectNulls />
-      </LineChart>
-    </ResponsiveContainer>
-  );
-}
-
 export interface TrendSeries {
   key: string;
   name: string;
   color: string;
 }
 
-/** Generic multi-line trend for network metrics (CPM, CPC, CTR, ROAS...). */
+/** Generic multi-line trend for network and MER metrics, with an optional target reference line. */
 export function MetricTrend({
   data,
   series,
   fmt = "num",
   height = 220,
+  target,
+  targetLabel,
 }: {
   data: object[];
   series: TrendSeries[];
   fmt?: ValueFmt;
   height?: number;
+  target?: number;
+  targetLabel?: string;
 }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -127,6 +104,14 @@ export function MetricTrend({
           labelStyle={{ color: "#94a3b8" }}
           formatter={(value, name) => [FMT[fmt](Number(value)), String(name)]}
         />
+        {target !== undefined ? (
+          <ReferenceLine
+            y={target}
+            stroke="#f59e0b"
+            strokeDasharray="6 4"
+            label={{ value: targetLabel ?? target.toFixed(1), fill: "#f59e0b", fontSize: 11, position: "insideTopRight" }}
+          />
+        ) : null}
         {series.map((s) => (
           <Line
             key={s.key}
@@ -136,6 +121,7 @@ export function MetricTrend({
             stroke={s.color}
             strokeWidth={2}
             dot={false}
+            connectNulls
           />
         ))}
       </LineChart>

@@ -1,37 +1,29 @@
 import { MetricTrend } from "../../components/charts";
+import { RangeSelector } from "../../components/range-selector";
 import { Card, Delta, PageHeader, SectionTitle, StatCard, StockChip } from "../../components/ui";
 import { fmtNum, fmtPct, fmtUsd, fmtUsdCompact } from "../../lib/format";
-import { getOverviewKpis, getStoreKpis, getTopProducts } from "../../lib/mock";
+import { resolveRange, type RangeSearchParams } from "../../lib/range";
+import { getEarliestDate, getLatestDate, getStoreKpis, getTopProducts } from "../../lib/mock";
 
-export default function StorePage() {
-  const { cur, prev, daily } = getStoreKpis();
-  const kpis = getOverviewKpis();
-  const products = getTopProducts();
+export default async function StorePage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
+  const earliestDate = getEarliestDate();
+  const latestDate = getLatestDate();
+  const range = resolveRange(await searchParams, { earliest: earliestDate, latest: latestDate });
+  const { cur, prev, daily } = getStoreKpis(range);
+  const products = getTopProducts(range);
 
   return (
     <>
       <PageHeader
         title="Store"
         description="The source of truth. Net revenue here is the MER numerator: gross minus refunds and cancellations, reconciled daily over a trailing 30 day window."
+        right={<RangeSelector current={range} pathname="/store" earliestDate={earliestDate} latestDate={latestDate} />}
       />
 
+      <SectionTitle hint={`${range.label}, ${range.compareLabel}.`}>KPIs</SectionTitle>
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
-        <StatCard
-          label="Net revenue 28d"
-          value={fmtUsdCompact(cur.revenue)}
-          current={cur.revenue}
-          previous={prev.revenue}
-          spark={kpis.sparkRevenue}
-          sparkColor="#f59e0b"
-        />
-        <StatCard
-          label="Orders 28d"
-          value={fmtNum(cur.orders)}
-          current={cur.orders}
-          previous={prev.orders}
-          spark={kpis.sparkOrders}
-          sparkColor="#34d399"
-        />
+        <StatCard label="Net revenue" value={fmtUsdCompact(cur.revenue)} current={cur.revenue} previous={prev.revenue} />
+        <StatCard label="Orders" value={fmtNum(cur.orders)} current={cur.orders} previous={prev.orders} />
         <StatCard label="AOV" value={fmtUsd(cur.aov)} current={cur.aov} previous={prev.aov} />
         <StatCard
           label="Refund rate"
@@ -72,9 +64,7 @@ export default function StorePage() {
         </Card>
       </div>
 
-      <SectionTitle hint="Top sellers over the last 28 days with availability. Out of stock on a top seller is lost revenue that no ad metric will explain.">
-        Top products
-      </SectionTitle>
+      <SectionTitle hint={`Top sellers, ${range.label.toLowerCase()}, with availability.`}>Top products</SectionTitle>
       <Card>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-sm">
@@ -84,7 +74,7 @@ export default function StorePage() {
                 <th className="pb-2 pr-4 font-medium">SKU</th>
                 <th className="pb-2 pr-4 text-right font-medium">Units</th>
                 <th className="pb-2 pr-4 text-right font-medium">Revenue</th>
-                <th className="pb-2 pr-4 text-right font-medium">vs prior 28d</th>
+                <th className="pb-2 pr-4 text-right font-medium">{range.compareLabel}</th>
                 <th className="pb-2 font-medium">Availability</th>
               </tr>
             </thead>
@@ -107,8 +97,8 @@ export default function StorePage() {
           </table>
         </div>
         <p className="mt-4 text-xs text-slate-500">
-          Alpine Sleeping Bag is out of stock while down 31%: restock before spending against it. For WooCommerce
-          clients, which order statuses count toward revenue is a per-client setting.
+          Alpine Sleeping Bag is out of stock while trending down: restock before spending against it. For
+          WooCommerce clients, which order statuses count toward revenue is a per-client setting.
         </p>
       </Card>
     </>

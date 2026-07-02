@@ -1,22 +1,33 @@
 import { MetricTrend } from "../../components/charts";
+import { RangeSelector } from "../../components/range-selector";
 import { Badge, Card, Funnel, HealthChip, PageHeader, SectionTitle, StatCard } from "../../components/ui";
 import { fmtNum, fmtNumCompact, fmtPct, fmtRatio, fmtUsd, fmtUsdCompact } from "../../lib/format";
-import { getGoogleCampaigns, getNetworkFunnel, getNetworkKpis } from "../../lib/mock";
+import { resolveRange, type RangeSearchParams } from "../../lib/range";
+import { getEarliestDate, getGoogleCampaigns, getLatestDate, getNetworkFunnel, getNetworkKpis } from "../../lib/mock";
 
-export default function GooglePage() {
-  const { cur, prev, trend, sparkSpend, sparkRoas } = getNetworkKpis("google");
-  const funnel = getNetworkFunnel("google");
-  const campaigns = getGoogleCampaigns();
+export default async function GooglePage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
+  const earliestDate = getEarliestDate();
+  const latestDate = getLatestDate();
+  const range = resolveRange(await searchParams, { earliest: earliestDate, latest: latestDate });
+
+  const { cur, prev, trend, sparkSpend, sparkRoas } = getNetworkKpis("google", range);
+  const funnel = getNetworkFunnel("google", range);
+  const campaigns = getGoogleCampaigns(range);
 
   return (
     <>
       <PageHeader
         title="Google Ads"
-        description="Network deep dive at campaign and ad group grain, last 28 days vs prior 28. Conversions and values are Google's attribution, including modeled conversions: diagnostic, never added to other platforms."
-        right={<Badge tone="warn">platform reported</Badge>}
+        description="Network deep dive at campaign and ad group grain. Conversions and values are Google's attribution, including modeled conversions: diagnostic, never added to other platforms."
+        right={
+          <div className="flex items-center gap-2">
+            <Badge tone="warn">platform reported</Badge>
+            <RangeSelector current={range} pathname="/google" earliestDate={earliestDate} latestDate={latestDate} />
+          </div>
+        }
       />
 
-      <SectionTitle>Network KPIs</SectionTitle>
+      <SectionTitle hint={`${range.label}, ${range.compareLabel}.`}>Network KPIs</SectionTitle>
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatCard label="Spend" value={fmtUsdCompact(cur.spend)} current={cur.spend} previous={prev.spend} spark={sparkSpend} sparkColor="#34d399" />
         <StatCard label="CPC" value={`$${cur.cpc.toFixed(2)}`} current={cur.cpc} previous={prev.cpc} invert />
@@ -45,7 +56,7 @@ export default function GooglePage() {
       </div>
 
       <SectionTitle>Funnel</SectionTitle>
-      <Card subtitle="Google reported events, 28d, deltas vs prior 28d.">
+      <Card subtitle={`Google reported events, ${range.label.toLowerCase()}, deltas ${range.compareLabel}.`}>
         <Funnel stages={funnel} />
       </Card>
 

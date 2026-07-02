@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { Nav } from "../components/nav";
+import { Suspense } from "react";
+import { Nav, NavFallback } from "../components/nav";
 import { Badge } from "../components/ui";
 import { DEMO_CLIENT } from "../lib/mock";
 import "./globals.css";
@@ -23,7 +24,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 <Badge tone="warn">Demo data</Badge>
               </div>
             </div>
-            <Nav />
+            <Suspense fallback={<NavFallback />}>
+              <Nav />
+            </Suspense>
           </aside>
           <main className="min-w-0 flex-1 px-4 py-5 md:px-8 md:py-6">{children}</main>
         </div>

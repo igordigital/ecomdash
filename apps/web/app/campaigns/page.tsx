@@ -1,20 +1,30 @@
+import { RangeSelector } from "../../components/range-selector";
 import { Badge, Card, HealthChip, PageHeader, PlatformDot } from "../../components/ui";
 import { fmtNumCompact, fmtPct, fmtRatio, fmtUsd } from "../../lib/format";
-import { getCampaignHealth, getUtmMatchRate } from "../../lib/mock";
+import { resolveRange, type RangeSearchParams } from "../../lib/range";
+import { getCampaignHealth, getEarliestDate, getLatestDate, getUtmMatchRate } from "../../lib/mock";
 
-export default function CampaignsPage() {
-  const campaigns = getCampaignHealth();
-  const matchRate = getUtmMatchRate();
+export default async function CampaignsPage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
+  const earliestDate = getEarliestDate();
+  const latestDate = getLatestDate();
+  const range = resolveRange(await searchParams, { earliest: earliestDate, latest: latestDate });
+  const campaigns = getCampaignHealth(range);
+  const matchRate = getUtmMatchRate(range);
 
   return (
     <>
       <PageHeader
         title="Campaigns"
         description="Every campaign across networks in one table, sorted by spend. Platform ROAS is diagnostic only: each platform claims conversions under its own attribution, so it is never summed across platforms."
-        right={<Badge tone={matchRate > 0.9 ? "good" : "warn"}>UTM match rate {fmtPct(matchRate)}</Badge>}
+        right={
+          <div className="flex items-center gap-2">
+            <Badge tone={matchRate > 0.9 ? "good" : "warn"}>UTM match rate {fmtPct(matchRate)}</Badge>
+            <RangeSelector current={range} pathname="/campaigns" earliestDate={earliestDate} latestDate={latestDate} />
+          </div>
+        }
       />
 
-      <Card subtitle="Last 28 days. GA4 columns join via the campaign crosswalk where UTM tagging allows.">
+      <Card subtitle={`${range.label}. GA4 columns join via the campaign crosswalk where UTM tagging allows.`}>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[860px] text-sm">
             <thead>

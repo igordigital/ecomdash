@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { FunnelStage, Health } from "../lib/mock";
+import type { FunnelStage, Health, RollingPoint } from "../lib/mock";
 import { fmtNumCompact, fmtPct } from "../lib/format";
 
 export function Card({
@@ -127,6 +127,44 @@ export function StatCard({
           </div>
         </div>
         {spark ? <Sparkline values={spark} color={sparkColor ?? "#38bdf8"} /> : null}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Always-visible 1D / 7D / 30D snapshot for a north-star metric, independent
+ * of the page's range selector. Anchored to the latest complete day.
+ */
+export function MultiWindowStat({
+  label,
+  points,
+  spark,
+  format,
+  invert,
+  sparkColor = "#38bdf8",
+}: {
+  label: string;
+  points: RollingPoint[];
+  spark: number[];
+  format: (n: number) => string;
+  invert?: boolean;
+  sparkColor?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</p>
+        <Sparkline values={spark} color={sparkColor} width={64} height={22} />
+      </div>
+      <div className="mt-2 grid grid-cols-3 divide-x divide-slate-800">
+        {points.map((p) => (
+          <div key={p.key} className="px-2.5 first:pl-0 last:pr-0">
+            <p className="text-[10px] font-medium text-slate-600">{p.label}</p>
+            <p className="mt-0.5 text-lg font-bold tabular-nums text-slate-100">{format(p.value)}</p>
+            <Delta current={p.value} previous={p.previous} invert={invert} />
+          </div>
+        ))}
       </div>
     </div>
   );

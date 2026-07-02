@@ -1,15 +1,28 @@
 import { MetricTrend } from "../../components/charts";
-import { Badge, Card, Funnel, PageHeader, SectionTitle } from "../../components/ui";
+import { RangeSelector } from "../../components/range-selector";
+import { Card, Funnel, PageHeader, SectionTitle } from "../../components/ui";
 import { fmtNumCompact, fmtPct } from "../../lib/format";
-import { getFunnelTrend, getNetworkFunnel, getNetworkKpis, getSiteFunnel } from "../../lib/mock";
+import { resolveRange, type RangeSearchParams } from "../../lib/range";
+import {
+  getEarliestDate,
+  getFunnelTrend,
+  getLatestDate,
+  getNetworkFunnel,
+  getNetworkKpis,
+  getSiteFunnel,
+} from "../../lib/mock";
 
-export default function FunnelPage() {
-  const site = getSiteFunnel();
-  const metaFunnel = getNetworkFunnel("meta");
-  const googleFunnel = getNetworkFunnel("google");
-  const meta = getNetworkKpis("meta");
-  const google = getNetworkKpis("google");
-  const trend = getFunnelTrend();
+export default async function FunnelPage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
+  const earliestDate = getEarliestDate();
+  const latestDate = getLatestDate();
+  const range = resolveRange(await searchParams, { earliest: earliestDate, latest: latestDate });
+
+  const site = getSiteFunnel(range);
+  const metaFunnel = getNetworkFunnel("meta", range);
+  const googleFunnel = getNetworkFunnel("google", range);
+  const meta = getNetworkKpis("meta", range);
+  const google = getNetworkKpis("google", range);
+  const trend = getFunnelTrend(range);
 
   const sessions = site[0]?.value ?? 0;
   const orders = site.at(-1)?.value ?? 0;
@@ -20,13 +33,17 @@ export default function FunnelPage() {
       <PageHeader
         title="Funnel"
         description="Where visits become orders and where they leak. The site funnel uses GA4 sessions and store orders. Network funnels use each platform's own event reporting and inherit its attribution."
-        right={<Badge tone="neutral">last 28 days</Badge>}
+        right={<RangeSelector current={range} pathname="/funnel" earliestDate={earliestDate} latestDate={latestDate} />}
       />
 
-      <SectionTitle hint={`Upstream paid reach: ${fmtNumCompact(meta.cur.impressions + google.cur.impressions)} impressions, ${fmtNumCompact(meta.cur.clicks + google.cur.clicks)} paid clicks across networks.`}>
+      <SectionTitle
+        hint={`Upstream paid reach: ${fmtNumCompact(meta.cur.impressions + google.cur.impressions)} impressions, ${fmtNumCompact(
+          meta.cur.clicks + google.cur.clicks,
+        )} paid clicks across networks, ${range.label.toLowerCase()}.`}
+      >
         Site funnel
       </SectionTitle>
-      <Card subtitle={`Session to order conversion: ${fmtPct(cvr)}. Deltas compare to the prior 28 days.`}>
+      <Card subtitle={`Session to order conversion: ${fmtPct(cvr)}. Deltas ${range.compareLabel}.`}>
         <Funnel stages={site} />
       </Card>
 

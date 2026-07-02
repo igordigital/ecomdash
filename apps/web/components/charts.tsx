@@ -8,6 +8,7 @@ import {
   ComposedChart,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -27,13 +28,29 @@ const TOOLTIP_STYLE = {
 const shortDate = (d: string) => d.slice(5);
 const usd = (v: number) => `$${Math.round(v).toLocaleString("en-US")}`;
 
+type ValueFmt = "usd" | "pct" | "num" | "ratio";
+
+const FMT: Record<ValueFmt, (v: number) => string> = {
+  usd: (v) => usd(v),
+  pct: (v) => `${(v * 100).toFixed(2)}%`,
+  num: (v) => v.toLocaleString("en-US"),
+  ratio: (v) => v.toFixed(2),
+};
+
+const AXIS_FMT: Record<ValueFmt, (v: number) => string> = {
+  usd: (v) => (Math.abs(v) >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v.toFixed(0)}`),
+  pct: (v) => `${(v * 100).toFixed(1)}%`,
+  num: (v) => (Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`),
+  ratio: (v) => v.toFixed(1),
+};
+
 export function SpendRevenueChart({ data }: { data: MerPoint[] }) {
   return (
     <ResponsiveContainer width="100%" height={280}>
       <ComposedChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
         <CartesianGrid {...GRID} />
         <XAxis dataKey="date" tickFormatter={shortDate} {...AXIS} tickLine={false} minTickGap={40} />
-        <YAxis {...AXIS} tickLine={false} tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} />
+        <YAxis {...AXIS} tickLine={false} tickFormatter={AXIS_FMT.usd} />
         <Tooltip
           contentStyle={TOOLTIP_STYLE}
           labelStyle={{ color: "#94a3b8" }}
@@ -54,20 +71,73 @@ export function SpendRevenueChart({ data }: { data: MerPoint[] }) {
   );
 }
 
-export function MerChart({ data }: { data: MerPoint[] }) {
+export function MerChart({ data, target }: { data: MerPoint[]; target?: number }) {
   return (
     <ResponsiveContainer width="100%" height={240}>
       <LineChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
         <CartesianGrid {...GRID} />
         <XAxis dataKey="date" tickFormatter={shortDate} {...AXIS} tickLine={false} minTickGap={40} />
-        <YAxis {...AXIS} tickLine={false} domain={["auto", "auto"]} tickFormatter={(v: number) => v.toFixed(1)} />
+        <YAxis {...AXIS} tickLine={false} domain={["auto", "auto"]} tickFormatter={AXIS_FMT.ratio} />
         <Tooltip
           contentStyle={TOOLTIP_STYLE}
           labelStyle={{ color: "#94a3b8" }}
           formatter={(value, name) => [Number(value).toFixed(2), String(name)]}
         />
+        {target !== undefined ? (
+          <ReferenceLine
+            y={target}
+            stroke="#f59e0b"
+            strokeDasharray="6 4"
+            label={{ value: `target ${target.toFixed(1)}`, fill: "#f59e0b", fontSize: 11, position: "insideTopRight" }}
+          />
+        ) : null}
         <Line dataKey="mer7" name="MER 7d" type="monotone" stroke="#a78bfa" strokeWidth={2} dot={false} connectNulls />
         <Line dataKey="mer28" name="MER 28d" type="monotone" stroke="#38bdf8" strokeWidth={2} dot={false} connectNulls />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+export interface TrendSeries {
+  key: string;
+  name: string;
+  color: string;
+}
+
+/** Generic multi-line trend for network metrics (CPM, CPC, CTR, ROAS...). */
+export function MetricTrend({
+  data,
+  series,
+  fmt = "num",
+  height = 220,
+}: {
+  data: object[];
+  series: TrendSeries[];
+  fmt?: ValueFmt;
+  height?: number;
+}) {
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+        <CartesianGrid {...GRID} />
+        <XAxis dataKey="date" tickFormatter={shortDate} {...AXIS} tickLine={false} minTickGap={40} />
+        <YAxis {...AXIS} tickLine={false} domain={["auto", "auto"]} tickFormatter={AXIS_FMT[fmt]} />
+        <Tooltip
+          contentStyle={TOOLTIP_STYLE}
+          labelStyle={{ color: "#94a3b8" }}
+          formatter={(value, name) => [FMT[fmt](Number(value)), String(name)]}
+        />
+        {series.map((s) => (
+          <Line
+            key={s.key}
+            dataKey={s.key}
+            name={s.name}
+            type="monotone"
+            stroke={s.color}
+            strokeWidth={2}
+            dot={false}
+          />
+        ))}
       </LineChart>
     </ResponsiveContainer>
   );
@@ -88,7 +158,7 @@ export function TrafficChart({ data, channels }: { data: TrafficDay[]; channels:
       <AreaChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
         <CartesianGrid {...GRID} />
         <XAxis dataKey="date" tickFormatter={shortDate} {...AXIS} tickLine={false} minTickGap={40} />
-        <YAxis {...AXIS} tickLine={false} tickFormatter={(v: number) => `${(v / 1000).toFixed(1)}k`} />
+        <YAxis {...AXIS} tickLine={false} tickFormatter={AXIS_FMT.num} />
         <Tooltip
           contentStyle={TOOLTIP_STYLE}
           labelStyle={{ color: "#94a3b8" }}

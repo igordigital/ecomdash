@@ -1,0 +1,30 @@
+{
+  "name": "@ecomdash/jobs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "worker": "tsx src/worker.ts",
+    "backfill": "tsx src/backfill.ts",
+    "daily-refresh": "tsx src/daily-refresh.ts"
+  },
+  "dependencies": {
+    "@ecomdash/connector-ga4": "workspace:*",
+    "@ecomdash/connector-google-ads": "workspace:*",
+    "@ecomdash/connector-meta": "workspace:*",
+    "@ecomdash/connector-shopify": "workspace:*",
+    "@ecomdash/connector-woo": "workspace:*",
+    "@ecomdash/core": "workspace:*",
+    "@ecomdash/mer": "workspace:*",
+    "@ecomdash/warehouse": "workspace:*",
+    "pg": "^8.13.0",
+    "pg-boss": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.0",
+    "@types/pg": "^8.11.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

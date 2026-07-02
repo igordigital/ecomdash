@@ -1,0 +1,8 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "packages/connectors/*"
+  - "jobs"
+allowBuilds:
+  esbuild: true
+  sharp: true

@@ -108,6 +108,8 @@ export interface AdminClient {
   ga4: { propertyId: string; name: string; status: ConnectionStatus } | null;
   store: StoreConnection | null;
   backfillStatus: BackfillStatus;
+  /** Date range of the most recently requested or completed backfill, inclusive. */
+  backfillRange: { start: string; end: string } | null;
 }
 
 export interface AdminUser {
@@ -150,6 +152,7 @@ const SEED_CLIENTS: AdminClient[] = [
     ga4: { propertyId: "properties/348219004", name: "Acme Outdoors — Production", status: "connected" },
     store: { type: "shopify", domain: "acme-outdoors.myshopify.com", status: "connected" },
     backfillStatus: "complete",
+    backfillRange: { start: "2026-03-08", end: "2026-06-05" },
   },
   {
     id: "c-2",
@@ -168,6 +171,7 @@ const SEED_CLIENTS: AdminClient[] = [
       status: "connected",
     },
     backfillStatus: "complete",
+    backfillRange: { start: "2026-03-21", end: "2026-06-18" },
   },
   {
     id: "c-3",
@@ -181,6 +185,7 @@ const SEED_CLIENTS: AdminClient[] = [
     ga4: null,
     store: { type: "shopify", domain: "solstice-skincare.myshopify.com", status: "connected" },
     backfillStatus: "running",
+    backfillRange: { start: "2026-04-01", end: "2026-06-29" },
   },
   {
     id: "c-4",
@@ -194,6 +199,7 @@ const SEED_CLIENTS: AdminClient[] = [
     ga4: { propertyId: "properties/348219337", name: "Harbor & Pine — Production", status: "connected" },
     store: null,
     backfillStatus: "not_started",
+    backfillRange: null,
   },
 ];
 
@@ -305,14 +311,25 @@ export function createClientRecord(input: NewClientInput): AdminClient {
         }
       : null,
     backfillStatus: "not_started",
+    backfillRange: null,
   };
   s.clients.push(record);
   return record;
 }
 
-export function startBackfill(clientId: string): void {
+/**
+ * Queues a backfill for an explicit date range. Only blocked while a run is
+ * already in flight (queued/running); a completed backfill can be re-run
+ * for a different (or overlapping) window, e.g. after connecting a new
+ * source or to re-pull a specific historical period.
+ */
+export function startBackfill(clientId: string, range: { start: string; end: string }): boolean {
   const c = store().clients.find((c) => c.id === clientId);
-  if (c) c.backfillStatus = c.backfillStatus === "not_started" ? "queued" : c.backfillStatus;
+  if (!c) return false;
+  if (c.backfillStatus === "queued" || c.backfillStatus === "running") return false;
+  c.backfillStatus = "queued";
+  c.backfillRange = range;
+  return true;
 }
 
 export function createUserRecord(input: {

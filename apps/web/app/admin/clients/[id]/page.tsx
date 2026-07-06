@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminPageHeader, BackfillBadge, ConnectionStatusBadge } from "@/components/admin/ui";
-import { StartBackfillButton } from "@/components/admin/row-actions";
+import { BackfillForm } from "@/components/admin/backfill-form";
 import { Card } from "@/components/ui";
 import { getClient, getUsers } from "@/lib/admin-store";
+import { addDays } from "@/lib/range";
+import { getLatestDate } from "@/lib/mock";
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -11,6 +13,14 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   if (!client) notFound();
 
   const clientUsers = getUsers().filter((u) => u.clientId === client.id);
+
+  const latestDate = getLatestDate();
+  const sources = [
+    client.google?.status === "connected" ? "Google Ads" : null,
+    client.meta?.status === "connected" ? "Meta" : null,
+    client.ga4?.status === "connected" ? "GA4" : null,
+    client.store?.status === "connected" ? (client.store.type === "shopify" ? "Shopify" : "WooCommerce") : null,
+  ].filter((s): s is string => !!s);
 
   return (
     <>
@@ -87,11 +97,24 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
       </div>
 
       <div className="mt-4">
-        <Card title="Backfill" subtitle="One-time historical pull, day by day, per source.">
-          <div className="flex items-center justify-between">
+        <Card title="Backfill" subtitle="One-time historical pull for a chosen date range, day by day, per source.">
+          <div className="mb-3 flex items-center justify-between">
             <BackfillBadge status={client.backfillStatus} />
-            <StartBackfillButton clientId={client.id} disabled={client.backfillStatus !== "not_started"} />
+            {client.backfillRange ? (
+              <p className="text-xs text-slate-500">
+                Last requested range: {client.backfillRange.start} to {client.backfillRange.end}
+              </p>
+            ) : null}
           </div>
+          <BackfillForm
+            clientId={client.id}
+            sources={sources}
+            defaultStart={client.backfillRange?.start ?? addDays(latestDate, -89)}
+            defaultEnd={client.backfillRange?.end ?? latestDate}
+            minDate={addDays(latestDate, -730)}
+            maxDate={latestDate}
+            disabled={client.backfillStatus === "queued" || client.backfillStatus === "running"}
+          />
           <p className="mt-3 text-xs text-slate-500">
             In production this enqueues day-grain jobs per source into the pg-boss queue (jobs/src/backfill.ts) and
             each (client, source, date) outcome is tracked in ingest_jobs so it is resumable.

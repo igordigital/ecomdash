@@ -111,8 +111,22 @@ export async function removeUserAction(userId: string): Promise<void> {
   removeUserRecord(userId);
 }
 
-export async function startBackfillAction(clientId: string): Promise<void> {
-  startBackfillRecord(clientId);
+export interface BackfillState {
+  ok: boolean;
+  error?: string;
+}
+
+export async function startBackfillAction(_prev: BackfillState, formData: FormData): Promise<BackfillState> {
+  const clientId = String(formData.get("clientId") ?? "");
+  const start = String(formData.get("start") ?? "");
+  const end = String(formData.get("end") ?? "");
+
+  if (!start || !end) return { ok: false, error: "Pick a start and end date." };
+  if (start > end) return { ok: false, error: "Start date must be before the end date." };
+
+  const queued = startBackfillRecord(clientId, { start, end });
+  if (!queued) return { ok: false, error: "A backfill is already in progress for this client." };
+  return { ok: true };
 }
 
 export async function redirectToClient(clientId: string): Promise<void> {

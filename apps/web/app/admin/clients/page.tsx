@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { AdminPageHeader, BackfillBadge, ConnectionStatusBadge } from "@/components/admin/ui";
 import { Card } from "@/components/ui";
-import { getClients } from "@/lib/admin-store";
+import { getClientBackfillSummary, getClients } from "@/lib/admin-store";
 
 export default function ClientsPage() {
   const clients = [...getClients()].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
@@ -55,7 +55,7 @@ export default function ClientsPage() {
                     <ConnectionStatusBadge status={c.store?.status ?? "not_connected"} />
                   </td>
                   <td className="py-2.5">
-                    <BackfillBadge status={c.backfillStatus} />
+                    <BackfillBadge status={getClientBackfillSummary(c)} />
                   </td>
                 </tr>
               ))}

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { AdminPageHeader, BackfillBadge, ConnectionStatusBadge } from "@/components/admin/ui";
 import { Card } from "@/components/ui";
-import { AGENCY_INTEGRATIONS, getClients, getUsers } from "@/lib/admin-store";
+import { AGENCY_INTEGRATIONS, getClientBackfillSummary, getClients, getUsers } from "@/lib/admin-store";
 
 export default async function AdminOverviewPage() {
   const clients = getClients();
@@ -84,7 +84,7 @@ export default async function AdminOverviewPage() {
                         <ConnectionStatusBadge status={c.store?.status ?? "not_connected"} />
                       </td>
                       <td className="py-2.5">
-                        <BackfillBadge status={c.backfillStatus} />
+                        <BackfillBadge status={getClientBackfillSummary(c)} />
                       </td>
                     </tr>
                   ))}

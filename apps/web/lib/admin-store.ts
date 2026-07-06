@@ -88,6 +88,14 @@ export function getGa4Properties(): Ga4Property[] {
 
 export type BackfillStatus = "not_started" | "queued" | "running" | "complete";
 export type ConnectionStatus = "connected" | "needs_reauth" | "not_connected";
+export type BackfillSourceKey = "google" | "meta" | "ga4" | "store";
+export const BACKFILL_SOURCES: BackfillSourceKey[] = ["google", "meta", "ga4", "store"];
+
+export interface SourceBackfillState {
+  status: BackfillStatus;
+  /** Date range of the most recently requested or completed backfill for this source, inclusive. */
+  range: { start: string; end: string } | null;
+}
 
 export interface StoreConnection {
   type: "shopify" | "woocommerce";
@@ -107,9 +115,33 @@ export interface AdminClient {
   meta: { accountId: string; name: string; status: ConnectionStatus } | null;
   ga4: { propertyId: string; name: string; status: ConnectionStatus } | null;
   store: StoreConnection | null;
-  backfillStatus: BackfillStatus;
-  /** Date range of the most recently requested or completed backfill, inclusive. */
-  backfillRange: { start: string; end: string } | null;
+  /** Backfill runs one day at a time per source (see jobs/src/backfill.ts), so status and range are tracked per source, not blended into one client-level field. */
+  backfill: Record<BackfillSourceKey, SourceBackfillState>;
+}
+
+/** Whether a source has a live connection a backfill could actually pull from right now. */
+export function isSourceConnected(client: AdminClient, source: BackfillSourceKey): boolean {
+  switch (source) {
+    case "google":
+      return client.google?.status === "connected";
+    case "meta":
+      return client.meta?.status === "connected";
+    case "ga4":
+      return client.ga4?.status === "connected";
+    case "store":
+      return client.store?.status === "connected";
+  }
+}
+
+/** Single-badge rollup for list views: worst-case status across sources that are actually connected. */
+export function getClientBackfillSummary(client: AdminClient): BackfillStatus {
+  const relevant = BACKFILL_SOURCES.filter((s) => isSourceConnected(client, s));
+  if (relevant.length === 0) return "not_started";
+  const statuses = relevant.map((s) => client.backfill[s].status);
+  if (statuses.some((s) => s === "running")) return "running";
+  if (statuses.some((s) => s === "queued")) return "queued";
+  if (statuses.every((s) => s === "complete")) return "complete";
+  return "not_started";
 }
 
 export interface AdminUser {
@@ -151,8 +183,12 @@ const SEED_CLIENTS: AdminClient[] = [
     meta: { accountId: "act_10897234561", name: "Acme Outdoors", status: "connected" },
     ga4: { propertyId: "properties/348219004", name: "Acme Outdoors — Production", status: "connected" },
     store: { type: "shopify", domain: "acme-outdoors.myshopify.com", status: "connected" },
-    backfillStatus: "complete",
-    backfillRange: { start: "2026-03-08", end: "2026-06-05" },
+    backfill: {
+      google: { status: "complete", range: { start: "2026-03-08", end: "2026-06-05" } },
+      meta: { status: "complete", range: { start: "2026-03-08", end: "2026-06-05" } },
+      ga4: { status: "complete", range: { start: "2026-03-08", end: "2026-06-05" } },
+      store: { status: "complete", range: { start: "2026-03-08", end: "2026-06-05" } },
+    },
   },
   {
     id: "c-2",
@@ -170,8 +206,12 @@ const SEED_CLIENTS: AdminClient[] = [
       includedStatuses: ["completed", "processing"],
       status: "connected",
     },
-    backfillStatus: "complete",
-    backfillRange: { start: "2026-03-21", end: "2026-06-18" },
+    backfill: {
+      google: { status: "complete", range: { start: "2026-03-21", end: "2026-06-18" } },
+      meta: { status: "complete", range: { start: "2026-03-21", end: "2026-06-18" } },
+      ga4: { status: "complete", range: { start: "2026-03-21", end: "2026-06-18" } },
+      store: { status: "complete", range: { start: "2026-03-21", end: "2026-06-18" } },
+    },
   },
   {
     id: "c-3",
@@ -184,8 +224,12 @@ const SEED_CLIENTS: AdminClient[] = [
     meta: { accountId: "act_10897235014", name: "Solstice Skincare", status: "connected" },
     ga4: null,
     store: { type: "shopify", domain: "solstice-skincare.myshopify.com", status: "connected" },
-    backfillStatus: "running",
-    backfillRange: { start: "2026-04-01", end: "2026-06-29" },
+    backfill: {
+      google: { status: "running", range: { start: "2026-04-01", end: "2026-06-29" } },
+      meta: { status: "running", range: { start: "2026-04-01", end: "2026-06-29" } },
+      ga4: { status: "not_started", range: null },
+      store: { status: "running", range: { start: "2026-04-01", end: "2026-06-29" } },
+    },
   },
   {
     id: "c-4",
@@ -198,8 +242,12 @@ const SEED_CLIENTS: AdminClient[] = [
     meta: { accountId: "act_10897235339", name: "Harbor & Pine Furniture", status: "connected" },
     ga4: { propertyId: "properties/348219337", name: "Harbor & Pine — Production", status: "connected" },
     store: null,
-    backfillStatus: "not_started",
-    backfillRange: null,
+    backfill: {
+      google: { status: "not_started", range: null },
+      meta: { status: "not_started", range: null },
+      ga4: { status: "not_started", range: null },
+      store: { status: "not_started", range: null },
+    },
   },
 ];
 
@@ -310,26 +358,44 @@ export function createClientRecord(input: NewClientInput): AdminClient {
           status: "connected",
         }
       : null,
-    backfillStatus: "not_started",
-    backfillRange: null,
+    backfill: {
+      google: { status: "not_started", range: null },
+      meta: { status: "not_started", range: null },
+      ga4: { status: "not_started", range: null },
+      store: { status: "not_started", range: null },
+    },
   };
   s.clients.push(record);
   return record;
 }
 
 /**
- * Queues a backfill for an explicit date range. Only blocked while a run is
- * already in flight (queued/running); a completed backfill can be re-run
- * for a different (or overlapping) window, e.g. after connecting a new
- * source or to re-pull a specific historical period.
+ * Queues a backfill for an explicit date range, one or more sources at a
+ * time (matches jobs/src/backfill.ts, which runs per source). Each
+ * requested source is queued independently; a source already queued or
+ * running is skipped rather than failing the whole request, so selecting
+ * "Google + GA4" while Meta is mid-run still queues the other two. A
+ * source that finished a previous run can be re-queued for a new window.
  */
-export function startBackfill(clientId: string, range: { start: string; end: string }): boolean {
+export function startBackfill(
+  clientId: string,
+  sources: BackfillSourceKey[],
+  range: { start: string; end: string },
+): { queued: BackfillSourceKey[]; blocked: BackfillSourceKey[] } {
   const c = store().clients.find((c) => c.id === clientId);
-  if (!c) return false;
-  if (c.backfillStatus === "queued" || c.backfillStatus === "running") return false;
-  c.backfillStatus = "queued";
-  c.backfillRange = range;
-  return true;
+  if (!c) return { queued: [], blocked: sources };
+  const queued: BackfillSourceKey[] = [];
+  const blocked: BackfillSourceKey[] = [];
+  for (const s of sources) {
+    const current = c.backfill[s];
+    if (current.status === "queued" || current.status === "running") {
+      blocked.push(s);
+      continue;
+    }
+    c.backfill[s] = { status: "queued", range };
+    queued.push(s);
+  }
+  return { queued, blocked };
 }
 
 export function createUserRecord(input: {

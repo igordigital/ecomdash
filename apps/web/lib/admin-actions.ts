@@ -12,8 +12,16 @@ import {
   removeUser as removeUserRecord,
   setUserPassword,
   startBackfill as startBackfillRecord,
+  type BackfillSourceKey,
   type Role,
 } from "./admin-store";
+
+const SOURCE_LABELS: Record<BackfillSourceKey, string> = {
+  google: "Google",
+  meta: "Meta",
+  ga4: "GA4",
+  store: "Store",
+};
 
 export interface CreateClientState {
   ok: boolean;
@@ -114,18 +122,31 @@ export async function removeUserAction(userId: string): Promise<void> {
 export interface BackfillState {
   ok: boolean;
   error?: string;
+  message?: string;
 }
 
 export async function startBackfillAction(_prev: BackfillState, formData: FormData): Promise<BackfillState> {
   const clientId = String(formData.get("clientId") ?? "");
   const start = String(formData.get("start") ?? "");
   const end = String(formData.get("end") ?? "");
+  const sources = formData.getAll("sources").map(String) as BackfillSourceKey[];
 
   if (!start || !end) return { ok: false, error: "Pick a start and end date." };
   if (start > end) return { ok: false, error: "Start date must be before the end date." };
+  if (sources.length === 0) return { ok: false, error: "Select at least one source to backfill." };
 
-  const queued = startBackfillRecord(clientId, { start, end });
-  if (!queued) return { ok: false, error: "A backfill is already in progress for this client." };
+  const { queued, blocked } = startBackfillRecord(clientId, sources, { start, end });
+  if (queued.length === 0) {
+    return { ok: false, error: "Every selected source already has a backfill in progress." };
+  }
+  if (blocked.length > 0) {
+    return {
+      ok: true,
+      message: `Queued ${queued.map((s) => SOURCE_LABELS[s]).join(", ")}. Skipped ${blocked
+        .map((s) => SOURCE_LABELS[s])
+        .join(", ")} (already in progress).`,
+    };
+  }
   return { ok: true };
 }
 

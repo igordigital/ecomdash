@@ -3,8 +3,19 @@
 import { useActionState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { startBackfillAction, type BackfillState } from "@/lib/admin-actions";
+import { BackfillBadge } from "@/components/admin/ui";
+import type { BackfillSourceKey, BackfillStatus } from "@/lib/admin-store";
 
 const initialState: BackfillState = { ok: false };
+
+export interface BackfillSourceRow {
+  key: BackfillSourceKey;
+  label: string;
+  connected: boolean;
+  connectionNote?: string; // e.g. "not connected", "needs reauthorization"
+  status: BackfillStatus;
+  range: { start: string; end: string } | null;
+}
 
 export function BackfillForm({
   clientId,
@@ -13,15 +24,13 @@ export function BackfillForm({
   defaultEnd,
   minDate,
   maxDate,
-  disabled,
 }: {
   clientId: string;
-  sources: string[];
+  sources: BackfillSourceRow[];
   defaultStart: string;
   defaultEnd: string;
   minDate: string;
   maxDate: string;
-  disabled: boolean;
 }) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState(startBackfillAction, initialState);
@@ -30,13 +39,46 @@ export function BackfillForm({
     if (state.ok) router.refresh();
   }, [state, router]);
 
+  const anySelectable = sources.some((s) => s.connected && s.status !== "queued" && s.status !== "running");
+
   return (
-    <form action={formAction} className="grid gap-3">
+    <form action={formAction} className="grid gap-4">
       <input type="hidden" name="clientId" value={clientId} />
-      <p className="text-xs text-slate-500">
-        Sources included: {sources.length > 0 ? sources.join(", ") : "none connected yet"}. Loops one day at a time
-        per source and upserts by grain, same as the daily job.
-      </p>
+
+      <div className="grid gap-2">
+        {sources.map((s) => {
+          const selectable = s.connected && s.status !== "queued" && s.status !== "running";
+          return (
+            <label
+              key={s.key}
+              className={`flex items-center justify-between gap-3 rounded border border-slate-800 px-3 py-2 text-sm ${
+                selectable ? "" : "opacity-50"
+              }`}
+            >
+              <span className="flex items-center gap-2.5">
+                <input
+                  type="checkbox"
+                  name="sources"
+                  value={s.key}
+                  defaultChecked={selectable}
+                  disabled={!selectable}
+                  className="h-4 w-4"
+                />
+                <span className="font-medium text-slate-200">{s.label}</span>
+              </span>
+              <span className="flex items-center gap-2 text-xs text-slate-500">
+                {s.range ? (
+                  <span>
+                    {s.range.start} – {s.range.end}
+                  </span>
+                ) : null}
+                {s.connected ? <BackfillBadge status={s.status} /> : <span>{s.connectionNote ?? "not connected"}</span>}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+
       <div className="flex flex-wrap items-end gap-3">
         <label className="grid gap-1 text-xs">
           <span className="text-slate-400">Start date</span>
@@ -64,13 +106,15 @@ export function BackfillForm({
         </label>
         <button
           type="submit"
-          disabled={disabled || pending || sources.length === 0}
+          disabled={!anySelectable || pending}
           className="rounded bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-40"
         >
           {pending ? "Queuing…" : "Start backfill"}
         </button>
       </div>
+
       {state.error ? <p className="text-sm text-red-400">{state.error}</p> : null}
+      {state.ok && state.message ? <p className="text-sm text-amber-400">{state.message}</p> : null}
     </form>
   );
 }

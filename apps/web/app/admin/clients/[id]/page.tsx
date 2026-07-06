@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminPageHeader, BackfillBadge, ConnectionStatusBadge } from "@/components/admin/ui";
-import { BackfillForm } from "@/components/admin/backfill-form";
+import { BackfillForm, type BackfillSourceRow } from "@/components/admin/backfill-form";
 import { Card } from "@/components/ui";
-import { getClient, getUsers } from "@/lib/admin-store";
+import { getClient, getClientBackfillSummary, getUsers } from "@/lib/admin-store";
 import { addDays } from "@/lib/range";
 import { getLatestDate } from "@/lib/mock";
 
@@ -15,12 +15,48 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   const clientUsers = getUsers().filter((u) => u.clientId === client.id);
 
   const latestDate = getLatestDate();
-  const sources = [
-    client.google?.status === "connected" ? "Google Ads" : null,
-    client.meta?.status === "connected" ? "Meta" : null,
-    client.ga4?.status === "connected" ? "GA4" : null,
-    client.store?.status === "connected" ? (client.store.type === "shopify" ? "Shopify" : "WooCommerce") : null,
-  ].filter((s): s is string => !!s);
+  const sourceRows: BackfillSourceRow[] = [
+    {
+      key: "google",
+      label: "Google Ads",
+      connected: client.google?.status === "connected",
+      connectionNote: client.google?.status === "needs_reauth" ? "needs reauthorization" : undefined,
+      status: client.backfill.google.status,
+      range: client.backfill.google.range,
+    },
+    {
+      key: "meta",
+      label: "Meta Ads",
+      connected: client.meta?.status === "connected",
+      connectionNote: client.meta?.status === "needs_reauth" ? "needs reauthorization" : undefined,
+      status: client.backfill.meta.status,
+      range: client.backfill.meta.range,
+    },
+    {
+      key: "ga4",
+      label: "GA4",
+      connected: client.ga4?.status === "connected",
+      connectionNote: client.ga4?.status === "needs_reauth" ? "needs reauthorization" : undefined,
+      status: client.backfill.ga4.status,
+      range: client.backfill.ga4.range,
+    },
+    {
+      key: "store",
+      label: client.store?.type === "woocommerce" ? "WooCommerce" : "Shopify",
+      connected: client.store?.status === "connected",
+      connectionNote: client.store?.status === "needs_reauth" ? "needs reauthorization" : undefined,
+      status: client.backfill.store.status,
+      range: client.backfill.store.range,
+    },
+  ];
+
+  const rangesOnFile = sourceRows.map((s) => s.range).filter((r): r is { start: string; end: string } => r !== null);
+  const defaultStart =
+    rangesOnFile.length > 0
+      ? rangesOnFile.reduce((min, r) => (r.start < min ? r.start : min), rangesOnFile[0]!.start)
+      : addDays(latestDate, -89);
+  const defaultEnd =
+    rangesOnFile.length > 0 ? rangesOnFile.reduce((max, r) => (r.end > max ? r.end : max), rangesOnFile[0]!.end) : latestDate;
 
   return (
     <>
@@ -97,23 +133,21 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
       </div>
 
       <div className="mt-4">
-        <Card title="Backfill" subtitle="One-time historical pull for a chosen date range, day by day, per source.">
+        <Card
+          title="Backfill"
+          subtitle="One-time historical pull for a chosen date range. Pick which sources to include: run just Google, just GA4, or any combination."
+        >
           <div className="mb-3 flex items-center justify-between">
-            <BackfillBadge status={client.backfillStatus} />
-            {client.backfillRange ? (
-              <p className="text-xs text-slate-500">
-                Last requested range: {client.backfillRange.start} to {client.backfillRange.end}
-              </p>
-            ) : null}
+            <BackfillBadge status={getClientBackfillSummary(client)} />
+            <p className="text-xs text-slate-600">Overall, across connected sources</p>
           </div>
           <BackfillForm
             clientId={client.id}
-            sources={sources}
-            defaultStart={client.backfillRange?.start ?? addDays(latestDate, -89)}
-            defaultEnd={client.backfillRange?.end ?? latestDate}
+            sources={sourceRows}
+            defaultStart={defaultStart}
+            defaultEnd={defaultEnd}
             minDate={addDays(latestDate, -730)}
             maxDate={latestDate}
-            disabled={client.backfillStatus === "queued" || client.backfillStatus === "running"}
           />
           <p className="mt-3 text-xs text-slate-500">
             In production this enqueues day-grain jobs per source into the pg-boss queue (jobs/src/backfill.ts) and

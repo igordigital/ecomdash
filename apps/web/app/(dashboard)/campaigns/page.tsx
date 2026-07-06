@@ -1,8 +1,8 @@
-import { RangeSelector } from "../../components/range-selector";
-import { Badge, Card, HealthChip, PageHeader, PlatformDot } from "../../components/ui";
-import { fmtNumCompact, fmtPct, fmtRatio, fmtUsd } from "../../lib/format";
-import { resolveRange, type RangeSearchParams } from "../../lib/range";
-import { getCampaignHealth, getEarliestDate, getLatestDate, getUtmMatchRate } from "../../lib/mock";
+import { RangeSelector } from "@/components/range-selector";
+import { Badge, Card, HealthChip, PageHeader, PlatformDot } from "@/components/ui";
+import { fmtNumCompact, fmtPct, fmtRatio, fmtUsd } from "@/lib/format";
+import { resolveRange, type RangeSearchParams } from "@/lib/range";
+import { getCampaignHealth, getEarliestDate, getLatestDate, getUtmMatchRate } from "@/lib/mock";
 
 export default async function CampaignsPage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
   const earliestDate = getEarliestDate();

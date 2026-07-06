@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { MetricTrend, SpendRevenueChart } from "../components/charts";
-import { RangeSelector } from "../components/range-selector";
+import { MetricTrend, SpendRevenueChart } from "@/components/charts";
+import { RangeSelector } from "@/components/range-selector";
 import {
   Badge,
   Card,
@@ -10,9 +10,9 @@ import {
   SectionTitle,
   ShareBar,
   StatCard,
-} from "../components/ui";
-import { fmtNum, fmtPct, fmtRatio, fmtUsd, fmtUsdCompact } from "../lib/format";
-import { rangeQueryString, resolveRange, type RangeSearchParams } from "../lib/range";
+} from "@/components/ui";
+import { fmtNum, fmtPct, fmtRatio, fmtUsd, fmtUsdCompact } from "@/lib/format";
+import { rangeQueryString, resolveRange, type RangeSearchParams } from "@/lib/range";
 import {
   MER_TARGET,
   getAnomalies,
@@ -24,7 +24,7 @@ import {
   getRollingWindows,
   getSiteFunnel,
   getStoreKpis,
-} from "../lib/mock";
+} from "@/lib/mock";
 
 export default async function OverviewPage({
   searchParams,

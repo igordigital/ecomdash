@@ -1,9 +1,9 @@
-import { TrafficChart } from "../../components/charts";
-import { RangeSelector } from "../../components/range-selector";
-import { Card, PageHeader } from "../../components/ui";
-import { fmtDuration, fmtNum, fmtPct } from "../../lib/format";
-import { resolveRange, type RangeSearchParams } from "../../lib/range";
-import { CHANNELS, getChannelSummaries, getEarliestDate, getLatestDate, getTrafficSeries } from "../../lib/mock";
+import { TrafficChart } from "@/components/charts";
+import { RangeSelector } from "@/components/range-selector";
+import { Card, PageHeader } from "@/components/ui";
+import { fmtDuration, fmtNum, fmtPct } from "@/lib/format";
+import { resolveRange, type RangeSearchParams } from "@/lib/range";
+import { CHANNELS, getChannelSummaries, getEarliestDate, getLatestDate, getTrafficSeries } from "@/lib/mock";
 
 export default async function TrafficPage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
   const earliestDate = getEarliestDate();

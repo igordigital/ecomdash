@@ -1,9 +1,9 @@
-import { MetricTrend } from "../../components/charts";
-import { RangeSelector } from "../../components/range-selector";
-import { Card, Delta, PageHeader, SectionTitle, StatCard, StockChip } from "../../components/ui";
-import { fmtNum, fmtPct, fmtUsd, fmtUsdCompact } from "../../lib/format";
-import { resolveRange, type RangeSearchParams } from "../../lib/range";
-import { getEarliestDate, getLatestDate, getStoreKpis, getTopProducts } from "../../lib/mock";
+import { MetricTrend } from "@/components/charts";
+import { RangeSelector } from "@/components/range-selector";
+import { Card, Delta, PageHeader, SectionTitle, StatCard, StockChip } from "@/components/ui";
+import { fmtNum, fmtPct, fmtUsd, fmtUsdCompact } from "@/lib/format";
+import { resolveRange, type RangeSearchParams } from "@/lib/range";
+import { getEarliestDate, getLatestDate, getStoreKpis, getTopProducts } from "@/lib/mock";
 
 export default async function StorePage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
   const earliestDate = getEarliestDate();

@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Suspense } from "react";
-import { Nav, NavFallback } from "../components/nav";
-import { Badge } from "../components/ui";
-import { DEMO_CLIENT } from "../lib/mock";
-import "./globals.css";
+import { Nav, NavFallback } from "@/components/nav";
+import { AdminLink, PreviewBanner } from "@/components/role-preview";
+import { Badge } from "@/components/ui";
+import { DEMO_CLIENT } from "@/lib/mock";
+import "../globals.css";
 
 export const metadata: Metadata = {
   title: "ecomdash",
@@ -16,7 +17,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         <div className="flex min-h-screen flex-col md:flex-row">
-          <aside className="shrink-0 border-b border-slate-800 p-4 md:w-56 md:border-r md:border-b-0">
+          <aside className="flex shrink-0 flex-col border-b border-slate-800 p-4 md:w-56 md:border-r md:border-b-0">
             <div className="mb-4 flex items-center justify-between gap-2 px-1 md:mb-6 md:block md:px-3">
               <p className="text-sm font-bold text-slate-100">ecomdash</p>
               <div className="flex items-center gap-2 md:mt-2">
@@ -27,8 +28,18 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <Suspense fallback={<NavFallback />}>
               <Nav />
             </Suspense>
+            <div className="mt-auto pt-4">
+              <Suspense fallback={null}>
+                <AdminLink />
+              </Suspense>
+            </div>
           </aside>
-          <main className="min-w-0 flex-1 px-4 py-5 md:px-8 md:py-6">{children}</main>
+          <main className="min-w-0 flex-1 px-4 py-5 md:px-8 md:py-6">
+            <Suspense fallback={null}>
+              <PreviewBanner />
+            </Suspense>
+            {children}
+          </main>
         </div>
       </body>
     </html>

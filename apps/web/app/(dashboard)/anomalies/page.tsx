@@ -1,8 +1,8 @@
-import { RangeSelector } from "../../components/range-selector";
-import { Badge, Card, PageHeader } from "../../components/ui";
-import { fmtUsd } from "../../lib/format";
-import { resolveRange, type RangeSearchParams } from "../../lib/range";
-import { getAnomalies, getEarliestDate, getLatestDate } from "../../lib/mock";
+import { RangeSelector } from "@/components/range-selector";
+import { Badge, Card, PageHeader } from "@/components/ui";
+import { fmtUsd } from "@/lib/format";
+import { resolveRange, type RangeSearchParams } from "@/lib/range";
+import { getAnomalies, getEarliestDate, getLatestDate } from "@/lib/mock";
 
 const KIND_LABEL: Record<string, string> = {
   spend_swing: "Spend swing",

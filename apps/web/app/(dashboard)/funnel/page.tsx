@@ -1,8 +1,8 @@
-import { MetricTrend } from "../../components/charts";
-import { RangeSelector } from "../../components/range-selector";
-import { Card, Funnel, PageHeader, SectionTitle } from "../../components/ui";
-import { fmtNumCompact, fmtPct } from "../../lib/format";
-import { resolveRange, type RangeSearchParams } from "../../lib/range";
+import { MetricTrend } from "@/components/charts";
+import { RangeSelector } from "@/components/range-selector";
+import { Card, Funnel, PageHeader, SectionTitle } from "@/components/ui";
+import { fmtNumCompact, fmtPct } from "@/lib/format";
+import { resolveRange, type RangeSearchParams } from "@/lib/range";
 import {
   getEarliestDate,
   getFunnelTrend,
@@ -10,7 +10,7 @@ import {
   getNetworkFunnel,
   getNetworkKpis,
   getSiteFunnel,
-} from "../../lib/mock";
+} from "@/lib/mock";
 
 export default async function FunnelPage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
   const earliestDate = getEarliestDate();

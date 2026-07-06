@@ -1,5 +1,5 @@
-import { MetricTrend } from "../../components/charts";
-import { RangeSelector } from "../../components/range-selector";
+import { MetricTrend } from "@/components/charts";
+import { RangeSelector } from "@/components/range-selector";
 import {
   Badge,
   Card,
@@ -9,9 +9,9 @@ import {
   SectionTitle,
   ShareBar,
   StatCard,
-} from "../../components/ui";
-import { fmtNum, fmtNumCompact, fmtPct, fmtRatio, fmtUsd, fmtUsdCompact } from "../../lib/format";
-import { resolveRange, type RangeSearchParams } from "../../lib/range";
+} from "@/components/ui";
+import { fmtNum, fmtNumCompact, fmtPct, fmtRatio, fmtUsd, fmtUsdCompact } from "@/lib/format";
+import { resolveRange, type RangeSearchParams } from "@/lib/range";
 import {
   getCampaignHealth,
   getCreativeBreakdown,
@@ -21,7 +21,7 @@ import {
   getNetworkFunnel,
   getNetworkKpis,
   getUtmMatchRate,
-} from "../../lib/mock";
+} from "@/lib/mock";
 
 const CREATIVE_COLORS: Record<string, string> = {
   "UGC video": "#38bdf8",

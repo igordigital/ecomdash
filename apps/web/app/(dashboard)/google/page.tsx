@@ -1,9 +1,9 @@
-import { MetricTrend } from "../../components/charts";
-import { RangeSelector } from "../../components/range-selector";
-import { Badge, Card, Funnel, HealthChip, PageHeader, SectionTitle, StatCard } from "../../components/ui";
-import { fmtNum, fmtNumCompact, fmtPct, fmtRatio, fmtUsd, fmtUsdCompact } from "../../lib/format";
-import { resolveRange, type RangeSearchParams } from "../../lib/range";
-import { getEarliestDate, getGoogleCampaigns, getLatestDate, getNetworkFunnel, getNetworkKpis } from "../../lib/mock";
+import { MetricTrend } from "@/components/charts";
+import { RangeSelector } from "@/components/range-selector";
+import { Badge, Card, Funnel, HealthChip, PageHeader, SectionTitle, StatCard } from "@/components/ui";
+import { fmtNum, fmtNumCompact, fmtPct, fmtRatio, fmtUsd, fmtUsdCompact } from "@/lib/format";
+import { resolveRange, type RangeSearchParams } from "@/lib/range";
+import { getEarliestDate, getGoogleCampaigns, getLatestDate, getNetworkFunnel, getNetworkKpis } from "@/lib/mock";
 
 export default async function GooglePage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
   const earliestDate = getEarliestDate();

@@ -3,12 +3,13 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import type { ReactNode } from "react";
 import { Suspense } from "react";
+import { ClientSwitcher } from "@/components/client-switcher";
 import { Nav, NavFallback } from "@/components/nav";
 import { AdminLink, PreviewBanner } from "@/components/role-preview";
 import { Badge } from "@/components/ui";
 import { logoutAction } from "@/lib/admin-actions";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth";
-import { getClient } from "@/lib/admin-store";
+import { getClients, getClient } from "@/lib/admin-store";
 import { DEMO_CLIENT } from "@/lib/mock";
 import "../globals.css";
 
@@ -20,6 +21,10 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const jar = await cookies();
   const session = await verifySession(jar.get(SESSION_COOKIE)?.value);
+  const isStaff = session?.role === "admin" || session?.role === "analyst";
+  // Only ever fetched/sent for staff sessions: a real Client-role session
+  // must never receive other clients' names in the page payload.
+  const previewClients = isStaff ? getClients().map((c) => ({ id: c.id, name: c.name })) : [];
   const clientName =
     session?.role === "client" ? (getClient(session.clientId ?? "")?.name ?? DEMO_CLIENT.name) : DEMO_CLIENT.name;
 
@@ -35,6 +40,16 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
                 <Badge tone="warn">Demo data</Badge>
               </div>
             </div>
+            {isStaff ? (
+              <div className="mb-4 px-1 md:px-0">
+                <p className="mb-1 px-2 text-[11px] font-medium uppercase tracking-wide text-slate-600">
+                  Viewing dashboard for
+                </p>
+                <Suspense fallback={null}>
+                  <ClientSwitcher clients={previewClients} />
+                </Suspense>
+              </div>
+            ) : null}
             <Suspense fallback={<NavFallback />}>
               <Nav />
             </Suspense>
@@ -59,7 +74,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           </aside>
           <main className="min-w-0 flex-1 px-4 py-5 md:px-8 md:py-6">
             <Suspense fallback={null}>
-              <PreviewBanner />
+              <PreviewBanner sessionRole={session?.role ?? "client"} />
             </Suspense>
             {children}
           </main>

@@ -21,9 +21,9 @@ export function AdminLink({ sessionRole }: { sessionRole: "admin" | "analyst" | 
   );
 }
 
-export function PreviewBanner() {
+export function PreviewBanner({ sessionRole }: { sessionRole: "admin" | "analyst" | "client" }) {
   const params = useSearchParams();
-  if (params.get("preview") !== "client") return null;
+  if (sessionRole === "client" || params.get("preview") !== "client") return null;
   const name = params.get("client") ?? "this client";
   return (
     <div className="mb-4 flex items-center justify-between rounded-md border border-amber-900 bg-amber-950/60 px-4 py-2 text-sm text-amber-300">

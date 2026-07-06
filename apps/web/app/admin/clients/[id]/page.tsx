@@ -64,7 +64,10 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         title={client.name}
         description={`${client.slug} · ${client.timezone} · ${client.currency}`}
         right={
-          <Link href={`/?preview=client&client=${encodeURIComponent(client.name)}`} className="text-sm text-sky-400 hover:underline">
+          <Link
+            href={`/?preview=client&clientId=${client.id}&client=${encodeURIComponent(client.name)}`}
+            className="text-sm text-sky-400 hover:underline"
+          >
             Preview dashboard →
           </Link>
         }

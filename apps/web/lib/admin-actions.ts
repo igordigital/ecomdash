@@ -2,11 +2,15 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { hashPassword, signSession, SESSION_COOKIE, verifyPassword } from "./auth";
 import {
   assignUserClient,
   createClientRecord,
   createUserRecord,
+  findUserByEmail,
+  getUser,
   removeUser as removeUserRecord,
+  setUserPassword,
   startBackfill as startBackfillRecord,
   type Role,
 } from "./admin-store";
@@ -69,11 +73,33 @@ export async function inviteUserAction(_prev: InviteUserState, formData: FormDat
   const email = String(formData.get("email") ?? "").trim();
   const role = String(formData.get("role") ?? "client") as Role;
   const clientId = String(formData.get("clientId") ?? "") || null;
+  const password = String(formData.get("password") ?? "");
 
   if (!name || !email) return { ok: false, error: "Name and email are required." };
   if (role === "client" && !clientId) return { ok: false, error: "Select which client this user should see." };
+  if (password.length < 8) return { ok: false, error: "Temporary password must be at least 8 characters." };
+  if (findUserByEmail(email)) return { ok: false, error: "A user with that email already exists." };
 
-  createUserRecord({ name, email, role, clientId: role === "client" ? clientId : null });
+  const passwordHash = await hashPassword(password);
+  createUserRecord({ name, email, role, clientId: role === "client" ? clientId : null, passwordHash });
+  return { ok: true };
+}
+
+export interface ChangePasswordState {
+  ok: boolean;
+  error?: string;
+}
+
+export async function changePasswordAction(
+  _prev: ChangePasswordState,
+  formData: FormData,
+): Promise<ChangePasswordState> {
+  const userId = String(formData.get("userId") ?? "");
+  const password = String(formData.get("password") ?? "");
+  if (password.length < 8) return { ok: false, error: "Password must be at least 8 characters." };
+  if (!getUser(userId)) return { ok: false, error: "User not found." };
+
+  setUserPassword(userId, await hashPassword(password));
   return { ok: true };
 }
 
@@ -89,19 +115,53 @@ export async function startBackfillAction(clientId: string): Promise<void> {
   startBackfillRecord(clientId);
 }
 
-const DEMO_ROLE_COOKIE = "demo_role";
-
-export async function setDemoRoleAction(role: "admin" | "analyst"): Promise<void> {
-  const store = await cookies();
-  store.set(DEMO_ROLE_COOKIE, role, { path: "/admin" });
-}
-
-export async function getDemoRole(): Promise<"admin" | "analyst"> {
-  const store = await cookies();
-  const value = store.get(DEMO_ROLE_COOKIE)?.value;
-  return value === "analyst" ? "analyst" : "admin";
-}
-
 export async function redirectToClient(clientId: string): Promise<void> {
   redirect(`/admin/clients/${clientId}`);
+}
+
+// ---------------------------------------------------------------------------
+// Login / logout
+// ---------------------------------------------------------------------------
+export interface LoginState {
+  ok: boolean;
+  error?: string;
+}
+
+async function performLogin(formData: FormData): Promise<LoginState> {
+  const email = String(formData.get("email") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+  const next = String(formData.get("next") ?? "");
+
+  const user = findUserByEmail(email);
+  if (!user || !(await verifyPassword(password, user.passwordHash))) {
+    return { ok: false, error: "Invalid email or password." };
+  }
+
+  const token = await signSession({ userId: user.id, name: user.name, role: user.role, clientId: user.clientId });
+  const jar = await cookies();
+  jar.set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+  });
+
+  const safeNext = next.startsWith("/") && !next.startsWith("/login") ? next : null;
+  redirect(safeNext ?? (user.role === "client" ? "/" : "/admin"));
+}
+
+export async function loginAction(_prev: LoginState, formData: FormData): Promise<LoginState> {
+  return performLogin(formData);
+}
+
+/** Same as loginAction but shaped for a plain <form action={...}>, used by the login page's one-click demo accounts. */
+export async function quickLoginAction(formData: FormData): Promise<void> {
+  await performLogin(formData);
+}
+
+export async function logoutAction(): Promise<void> {
+  const jar = await cookies();
+  jar.delete(SESSION_COOKIE);
+  redirect("/login");
 }

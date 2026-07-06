@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import type { ReactNode } from "react";
-import { RoleSwitcher } from "@/components/admin/role-switcher";
+import { logoutAction } from "@/lib/admin-actions";
+import { SESSION_COOKIE, verifySession } from "@/lib/auth";
 import { Badge } from "@/components/ui";
-import { getDemoRole } from "@/lib/admin-actions";
-import { canManageIntegrations } from "@/lib/admin-permissions";
+import { canManageIntegrations, type StaffRole } from "@/lib/admin-permissions";
 import "../globals.css";
 
 export const metadata: Metadata = {
@@ -20,7 +21,10 @@ const LINKS = [
 ];
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
-  const role = await getDemoRole();
+  const jar = await cookies();
+  const session = await verifySession(jar.get(SESSION_COOKIE)?.value);
+  // middleware guarantees a non-client session reaches here; this is a type-narrowing fallback, not a security boundary.
+  const role: StaffRole = session?.role === "admin" ? "admin" : "analyst";
 
   return (
     <html lang="en">
@@ -45,11 +49,16 @@ export default async function AdminLayout({ children }: { children: ReactNode })
                 </Link>
               ))}
             </nav>
-            <div className="mt-auto flex flex-col gap-3 pt-4">
-              <RoleSwitcher role={role} />
+            <div className="mt-auto flex flex-col gap-2 border-t border-slate-800 pt-4">
+              <p className="truncate px-1 text-xs text-slate-500">{session?.name ?? "Unknown user"}</p>
               <Link href="/" className="text-xs text-slate-500 hover:text-slate-300 hover:underline">
                 View client dashboards
               </Link>
+              <form action={logoutAction}>
+                <button type="submit" className="text-xs text-slate-500 hover:text-slate-300 hover:underline">
+                  Log out
+                </button>
+              </form>
             </div>
           </aside>
           <main className="min-w-0 flex-1 px-4 py-5 md:px-8 md:py-6">{children}</main>

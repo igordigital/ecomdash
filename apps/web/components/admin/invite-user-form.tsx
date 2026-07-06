@@ -39,7 +39,7 @@ export function InviteUserForm({ clients, canInviteStaff }: { clients: AdminClie
     <form
       ref={formRef}
       action={formAction}
-      className="mb-4 grid gap-3 rounded-lg border border-slate-800 bg-slate-900/40 p-4 md:grid-cols-[1fr_1fr_auto_auto]"
+      className="mb-4 grid gap-3 rounded-lg border border-slate-800 bg-slate-900/40 p-4 md:grid-cols-2 lg:grid-cols-3"
     >
       <label className="grid gap-1 text-sm">
         <span className="text-slate-400">Name</span>
@@ -82,6 +82,18 @@ export function InviteUserForm({ clients, canInviteStaff }: { clients: AdminClie
       ) : (
         <div />
       )}
+
+      <label className="grid gap-1 text-sm">
+        <span className="text-slate-400">Temporary password</span>
+        <input
+          name="password"
+          type="password"
+          required
+          minLength={8}
+          placeholder="At least 8 characters"
+          className="rounded border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-slate-100"
+        />
+      </label>
 
       {state.error ? <p className="col-span-full text-sm text-red-400">{state.error}</p> : null}
 

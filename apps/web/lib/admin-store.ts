@@ -117,7 +117,17 @@ export interface AdminUser {
   role: Role;
   clientId: string | null; // set only for role === "client"
   createdAt: string;
+  passwordHash: string;
 }
+
+/**
+ * PBKDF2 hash (see lib/auth.ts) of the shared demo password "ecomdash-demo".
+ * Every seed account below logs in with this password, reusing one
+ * precomputed hash for convenience; users created later via the invite
+ * form each get their own freshly salted hash from a real password.
+ */
+const SEED_PASSWORD_HASH =
+  "30f7020eac5ef97ac66f36beec3ba70c:f2fec39016290b4b8b8108c363238bb5229c2d61a6e21252393e113d97088b49";
 
 function slugify(name: string): string {
   return name
@@ -188,11 +198,11 @@ const SEED_CLIENTS: AdminClient[] = [
 ];
 
 const SEED_USERS: AdminUser[] = [
-  { id: "u-1", name: "Igor Zvagelsky", email: "i@igor.digital", role: "admin", clientId: null, createdAt: "2026-06-01" },
-  { id: "u-2", name: "Dana Whitfield", email: "dana@ecomdash.agency", role: "analyst", clientId: null, createdAt: "2026-06-04" },
-  { id: "u-3", name: "Marcus Ide", email: "marcus@ecomdash.agency", role: "analyst", clientId: null, createdAt: "2026-06-10" },
-  { id: "u-4", name: "Priya Nandakumar", email: "priya@acmeoutdoors.com", role: "client", clientId: "c-1", createdAt: "2026-06-06" },
-  { id: "u-5", name: "Tom Rutherford", email: "tom@northwindcoffee.co", role: "client", clientId: "c-2", createdAt: "2026-06-19" },
+  { id: "u-1", name: "Igor Zvagelsky", email: "i@igor.digital", role: "admin", clientId: null, createdAt: "2026-06-01", passwordHash: SEED_PASSWORD_HASH },
+  { id: "u-2", name: "Dana Whitfield", email: "dana@ecomdash.agency", role: "analyst", clientId: null, createdAt: "2026-06-04", passwordHash: SEED_PASSWORD_HASH },
+  { id: "u-3", name: "Marcus Ide", email: "marcus@ecomdash.agency", role: "analyst", clientId: null, createdAt: "2026-06-10", passwordHash: SEED_PASSWORD_HASH },
+  { id: "u-4", name: "Priya Nandakumar", email: "priya@acmeoutdoors.com", role: "client", clientId: "c-1", createdAt: "2026-06-06", passwordHash: SEED_PASSWORD_HASH },
+  { id: "u-5", name: "Tom Rutherford", email: "tom@northwindcoffee.co", role: "client", clientId: "c-2", createdAt: "2026-06-19", passwordHash: SEED_PASSWORD_HASH },
 ];
 
 /**
@@ -236,6 +246,13 @@ export function getClient(id: string): AdminClient | undefined {
 }
 export function getUsers(): AdminUser[] {
   return store().users;
+}
+export function getUser(id: string): AdminUser | undefined {
+  return store().users.find((u) => u.id === id);
+}
+export function findUserByEmail(email: string): AdminUser | undefined {
+  const normalized = email.trim().toLowerCase();
+  return store().users.find((u) => u.email.toLowerCase() === normalized);
 }
 
 /** Accounts already linked to a client, keyed by id, so the wizard can flag them instead of allowing double assignment. */
@@ -298,7 +315,13 @@ export function startBackfill(clientId: string): void {
   if (c) c.backfillStatus = c.backfillStatus === "not_started" ? "queued" : c.backfillStatus;
 }
 
-export function createUserRecord(input: { name: string; email: string; role: Role; clientId: string | null }): AdminUser {
+export function createUserRecord(input: {
+  name: string;
+  email: string;
+  role: Role;
+  clientId: string | null;
+  passwordHash: string;
+}): AdminUser {
   const s = store();
   const record: AdminUser = {
     id: `u-${s.nextUserSeq++}`,
@@ -307,6 +330,7 @@ export function createUserRecord(input: { name: string; email: string; role: Rol
     role: input.role,
     clientId: input.role === "client" ? input.clientId : null,
     createdAt: new Date().toISOString().slice(0, 10),
+    passwordHash: input.passwordHash,
   };
   s.users.push(record);
   return record;
@@ -315,6 +339,11 @@ export function createUserRecord(input: { name: string; email: string; role: Rol
 export function assignUserClient(userId: string, clientId: string | null): void {
   const u = store().users.find((u) => u.id === userId);
   if (u && u.role === "client") u.clientId = clientId;
+}
+
+export function setUserPassword(userId: string, passwordHash: string): void {
+  const u = store().users.find((u) => u.id === userId);
+  if (u) u.passwordHash = passwordHash;
 }
 
 export function removeUser(userId: string): void {

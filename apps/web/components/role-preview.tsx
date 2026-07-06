@@ -3,10 +3,14 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
-/** Hidden while previewing as a Client, since real Client-role users never see /admin. */
-export function AdminLink() {
+/**
+ * Hidden for real Client-role sessions (they never see /admin), and also
+ * hidden while an Admin/Analyst is previewing a client dashboard via the
+ * ?preview=client overlay, so the preview reads as read-only.
+ */
+export function AdminLink({ sessionRole }: { sessionRole: "admin" | "analyst" | "client" }) {
   const params = useSearchParams();
-  if (params.get("preview") === "client") return null;
+  if (sessionRole === "client" || params.get("preview") === "client") return null;
   return (
     <Link
       href="/admin"

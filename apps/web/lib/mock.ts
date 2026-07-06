@@ -28,7 +28,7 @@
  * filter mart rows by client_id and date, so no page logic changes.
  */
 
-import { addDays, chartRange, previousRange, type ResolvedRange } from "./range";
+import { addDays, previousRange, type ResolvedRange } from "./range";
 
 function mulberry32(seed: number) {
   let a = seed >>> 0;
@@ -165,14 +165,13 @@ function rollingMer(daily: DailyFact[], windowDays: number): (number | null)[] {
   return out;
 }
 
-/** Trend chart data: MER computed with a rolling window matching the selected range, over the chart's trailing context window. */
+/** Trend chart data: MER computed with a rolling window matching the selected range, plotted over that same range. */
 export function getMerSeries(clientId: string, range: ResolvedRange): MerPoint[] {
   const daily = getDaily(clientId);
   const merByIndex = rollingMer(daily, range.days);
-  const win = chartRange(range);
   const points: MerPoint[] = [];
   daily.forEach((d, i) => {
-    if (d.date < win.start || d.date > win.end) return;
+    if (d.date < range.start || d.date > range.end) return;
     points.push({ date: d.date, metaSpend: d.metaSpend, googleSpend: d.googleSpend, revenue: d.revenue, mer: merByIndex[i] ?? null });
   });
   return points;
@@ -405,8 +404,7 @@ export function getNetworkKpis(clientId: string, platform: "meta" | "google", ra
   const cur = sliceByDate(daily, range.start, range.end);
   const pr = previousRange(range);
   const prev = sliceByDate(daily, pr.start, pr.end);
-  const win = chartRange(range);
-  const trendDays = sliceByDate(daily, win.start, win.end);
+  const trendDays = cur;
   const sparkWin = sparkBounds(range.end);
   const spark = sliceByDate(daily, sparkWin.start, sparkWin.end);
   return {
@@ -496,11 +494,11 @@ export function getStoreKpis(
   range: ResolvedRange,
 ): { cur: StoreStats; prev: StoreStats; daily: StoreDay[] } {
   const storeDaily = getStoreDaily(clientId);
-  const cur = aggStore(sliceByDate(storeDaily, range.start, range.end));
+  const daily = sliceByDate(storeDaily, range.start, range.end);
+  const cur = aggStore(daily);
   const pr = previousRange(range);
   const prev = aggStore(sliceByDate(storeDaily, pr.start, pr.end));
-  const win = chartRange(range);
-  return { cur, prev, daily: sliceByDate(storeDaily, win.start, win.end) };
+  return { cur, prev, daily };
 }
 
 // ---------------------------------------------------------------------------
@@ -599,9 +597,8 @@ export interface FunnelTrendPoint {
 }
 
 export function getFunnelTrend(clientId: string, range: ResolvedRange): FunnelTrendPoint[] {
-  const win = chartRange(range);
   const storeByDate = new Map(getStoreDaily(clientId).map((d) => [d.date, d]));
-  return sliceByDate(getTrafficSeriesFull(clientId), win.start, win.end).map((row) => {
+  return sliceByDate(getTrafficSeriesFull(clientId), range.start, range.end).map((row) => {
     const date = String(row.date);
     const sessions = CHANNELS.reduce((t, ch) => t + Number(row[ch] ?? 0), 0);
     const orders = storeByDate.get(date)?.orders ?? 0;
@@ -861,8 +858,7 @@ function getTrafficSeriesFull(clientId: string): TrafficDay[] {
 }
 
 export function getTrafficSeries(clientId: string, range: ResolvedRange): TrafficDay[] {
-  const win = chartRange(range);
-  return sliceByDate(getTrafficSeriesFull(clientId), win.start, win.end);
+  return sliceByDate(getTrafficSeriesFull(clientId), range.start, range.end);
 }
 
 export interface ChannelSummary {

@@ -79,12 +79,6 @@ export function previousRange(range: ResolvedRange): { start: string; end: strin
   return { start, end };
 }
 
-/** Trailing chart window: at least 30 days of context, capped at 90, ending with the range. */
-export function chartRange(range: ResolvedRange): { start: string; end: string } {
-  const days = Math.min(90, Math.max(30, range.days));
-  return { start: addDays(range.end, -(days - 1)), end: range.end };
-}
-
 export function rangeQueryString(range: ResolvedRange): string {
   return range.key === "custom" ? `range=custom&from=${range.start}&to=${range.end}` : `range=${range.key}`;
 }

@@ -46,7 +46,7 @@ export default async function TrafficPage({ searchParams }: { searchParams: Prom
       </div>
 
       <SectionTitle>Channels</SectionTitle>
-      <Card title="Daily sessions by channel" subtitle="Trailing context window around the selected range, stacked.">
+      <Card title="Daily sessions by channel" subtitle={`${range.label}, stacked.`}>
         <TrafficChart data={series} channels={CHANNELS} />
       </Card>
 

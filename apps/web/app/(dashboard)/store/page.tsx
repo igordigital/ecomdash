@@ -3,14 +3,17 @@ import { RangeSelector } from "@/components/range-selector";
 import { Card, Delta, PageHeader, SectionTitle, StatCard, StockChip } from "@/components/ui";
 import { fmtNum, fmtPct, fmtUsd, fmtUsdCompact } from "@/lib/format";
 import { resolveRange, type RangeSearchParams } from "@/lib/range";
+import { resolveViewedClientId } from "@/lib/viewed-client";
 import { getEarliestDate, getLatestDate, getStoreKpis, getTopProducts } from "@/lib/mock";
 
 export default async function StorePage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
+  const sp = await searchParams;
   const earliestDate = getEarliestDate();
   const latestDate = getLatestDate();
-  const range = resolveRange(await searchParams, { earliest: earliestDate, latest: latestDate });
-  const { cur, prev, daily } = getStoreKpis(range);
-  const products = getTopProducts(range);
+  const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
+  const clientId = await resolveViewedClientId(sp.clientId);
+  const { cur, prev, daily } = getStoreKpis(clientId, range);
+  const products = getTopProducts(clientId, range);
 
   return (
     <>

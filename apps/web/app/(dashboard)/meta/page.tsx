@@ -12,6 +12,7 @@ import {
 } from "@/components/ui";
 import { fmtNum, fmtNumCompact, fmtPct, fmtRatio, fmtUsd, fmtUsdCompact } from "@/lib/format";
 import { resolveRange, type RangeSearchParams } from "@/lib/range";
+import { resolveViewedClientId } from "@/lib/viewed-client";
 import {
   getCampaignHealth,
   getCreativeBreakdown,
@@ -32,16 +33,18 @@ const CREATIVE_COLORS: Record<string, string> = {
 };
 
 export default async function MetaPage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
+  const sp = await searchParams;
   const earliestDate = getEarliestDate();
   const latestDate = getLatestDate();
-  const range = resolveRange(await searchParams, { earliest: earliestDate, latest: latestDate });
+  const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
+  const clientId = await resolveViewedClientId(sp.clientId);
 
-  const { cur, prev, trend, sparkSpend, sparkCtr, sparkCpm, sparkRoas } = getNetworkKpis("meta", range);
-  const funnel = getNetworkFunnel("meta", range);
-  const creatives = getCreativeBreakdown(range);
-  const campaigns = getCampaignHealth(range).filter((c) => c.platform === "meta");
-  const ads = getMetaAds(range);
-  const matchRate = getUtmMatchRate(range);
+  const { cur, prev, trend, sparkSpend, sparkCtr, sparkCpm, sparkRoas } = getNetworkKpis(clientId, "meta", range);
+  const funnel = getNetworkFunnel(clientId, "meta", range);
+  const creatives = getCreativeBreakdown(clientId, range);
+  const campaigns = getCampaignHealth(clientId, range).filter((c) => c.platform === "meta");
+  const ads = getMetaAds(clientId, range);
+  const matchRate = getUtmMatchRate(clientId, range);
 
   return (
     <>

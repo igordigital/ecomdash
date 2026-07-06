@@ -12,7 +12,8 @@ import {
   StatCard,
 } from "@/components/ui";
 import { fmtNum, fmtPct, fmtRatio, fmtUsd, fmtUsdCompact } from "@/lib/format";
-import { rangeQueryString, resolveRange, type RangeSearchParams } from "@/lib/range";
+import { rangeQueryString, resolveRange, withPreviewParams, type RangeSearchParams } from "@/lib/range";
+import { resolveViewedClientId } from "@/lib/viewed-client";
 import {
   MER_TARGET,
   getAnomalies,
@@ -31,18 +32,20 @@ export default async function OverviewPage({
 }: {
   searchParams: Promise<RangeSearchParams>;
 }) {
+  const sp = await searchParams;
   const earliestDate = getEarliestDate();
   const latestDate = getLatestDate();
-  const range = resolveRange(await searchParams, { earliest: earliestDate, latest: latestDate });
+  const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
+  const clientId = await resolveViewedClientId(sp.clientId);
 
-  const rolling = getRollingWindows();
-  const kpis = getOverviewKpis(range);
-  const store = getStoreKpis(range);
-  const series = getMerSeries(range);
-  const meta = getNetworkKpis("meta", range);
-  const google = getNetworkKpis("google", range);
-  const funnel = getSiteFunnel(range);
-  const topAnomalies = getAnomalies(range).slice(0, 3);
+  const rolling = getRollingWindows(clientId);
+  const kpis = getOverviewKpis(clientId, range);
+  const store = getStoreKpis(clientId, range);
+  const series = getMerSeries(clientId, range);
+  const meta = getNetworkKpis(clientId, "meta", range);
+  const google = getNetworkKpis(clientId, "google", range);
+  const funnel = getSiteFunnel(clientId, range);
+  const topAnomalies = getAnomalies(clientId, range).slice(0, 3);
 
   return (
     <>
@@ -149,7 +152,7 @@ export default async function OverviewPage({
               <div key={name} className="rounded border border-slate-800 p-3">
                 <div className="flex items-center justify-between">
                   <p className="font-medium text-slate-200">{name}</p>
-                  <Link href={`${href}?${rangeQueryString(range)}`} className="text-xs text-sky-400 hover:underline">
+                  <Link href={`${href}?${withPreviewParams(rangeQueryString(range), sp)}`} className="text-xs text-sky-400 hover:underline">
                     Deep dive
                   </Link>
                 </div>
@@ -203,7 +206,7 @@ export default async function OverviewPage({
               ))}
             </ul>
             <Link
-              href={`/anomalies?${rangeQueryString(range)}`}
+              href={`/anomalies?${withPreviewParams(rangeQueryString(range), sp)}`}
               className="mt-3 inline-block text-xs text-sky-400 hover:underline"
             >
               All flags

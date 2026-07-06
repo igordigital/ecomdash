@@ -3,16 +3,19 @@ import { RangeSelector } from "@/components/range-selector";
 import { Badge, Card, Funnel, HealthChip, PageHeader, SectionTitle, StatCard } from "@/components/ui";
 import { fmtNum, fmtNumCompact, fmtPct, fmtRatio, fmtUsd, fmtUsdCompact } from "@/lib/format";
 import { resolveRange, type RangeSearchParams } from "@/lib/range";
+import { resolveViewedClientId } from "@/lib/viewed-client";
 import { getEarliestDate, getGoogleCampaigns, getLatestDate, getNetworkFunnel, getNetworkKpis } from "@/lib/mock";
 
 export default async function GooglePage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
+  const sp = await searchParams;
   const earliestDate = getEarliestDate();
   const latestDate = getLatestDate();
-  const range = resolveRange(await searchParams, { earliest: earliestDate, latest: latestDate });
+  const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
+  const clientId = await resolveViewedClientId(sp.clientId);
 
-  const { cur, prev, trend, sparkSpend, sparkRoas } = getNetworkKpis("google", range);
-  const funnel = getNetworkFunnel("google", range);
-  const campaigns = getGoogleCampaigns(range);
+  const { cur, prev, trend, sparkSpend, sparkRoas } = getNetworkKpis(clientId, "google", range);
+  const funnel = getNetworkFunnel(clientId, "google", range);
+  const campaigns = getGoogleCampaigns(clientId, range);
 
   return (
     <>

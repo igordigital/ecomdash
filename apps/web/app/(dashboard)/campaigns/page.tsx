@@ -2,14 +2,17 @@ import { RangeSelector } from "@/components/range-selector";
 import { Badge, Card, HealthChip, PageHeader, PlatformDot } from "@/components/ui";
 import { fmtNumCompact, fmtPct, fmtRatio, fmtUsd } from "@/lib/format";
 import { resolveRange, type RangeSearchParams } from "@/lib/range";
+import { resolveViewedClientId } from "@/lib/viewed-client";
 import { getCampaignHealth, getEarliestDate, getLatestDate, getUtmMatchRate } from "@/lib/mock";
 
 export default async function CampaignsPage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
+  const sp = await searchParams;
   const earliestDate = getEarliestDate();
   const latestDate = getLatestDate();
-  const range = resolveRange(await searchParams, { earliest: earliestDate, latest: latestDate });
-  const campaigns = getCampaignHealth(range);
-  const matchRate = getUtmMatchRate(range);
+  const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
+  const clientId = await resolveViewedClientId(sp.clientId);
+  const campaigns = getCampaignHealth(clientId, range);
+  const matchRate = getUtmMatchRate(clientId, range);
 
   return (
     <>

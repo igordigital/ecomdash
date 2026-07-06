@@ -3,7 +3,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import type { ReactNode } from "react";
 import { Suspense } from "react";
-import { ClientSwitcher } from "@/components/client-switcher";
+import { ClientSwitcher, ViewedClientName } from "@/components/client-switcher";
 import { Nav, NavFallback } from "@/components/nav";
 import { AdminLink, PreviewBanner } from "@/components/role-preview";
 import { Badge } from "@/components/ui";
@@ -36,7 +36,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             <div className="mb-4 flex items-center justify-between gap-2 px-1 md:mb-6 md:block md:px-3">
               <p className="text-sm font-bold text-slate-100">ecomdash</p>
               <div className="flex items-center gap-2 md:mt-2">
-                <p className="text-xs text-slate-400">{clientName}</p>
+                <Suspense fallback={<p className="text-xs text-slate-400">{clientName}</p>}>
+                  <ViewedClientName clients={previewClients} fixedName={isStaff ? null : clientName} />
+                </Suspense>
                 <Badge tone="warn">Demo data</Badge>
               </div>
             </div>

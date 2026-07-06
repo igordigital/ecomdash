@@ -11,6 +11,11 @@ export interface RangeSearchParams {
   range?: string;
   from?: string;
   to?: string;
+  /** Which client's data to view (Admin/Analyst preview only); see lib/viewed-client.ts. */
+  clientId?: string;
+  /** Preview-mode display params, carried through cross-page links alongside clientId. */
+  preview?: string;
+  client?: string;
 }
 
 export interface ResolvedRange {
@@ -82,4 +87,10 @@ export function chartRange(range: ResolvedRange): { start: string; end: string }
 
 export function rangeQueryString(range: ResolvedRange): string {
   return range.key === "custom" ? `range=custom&from=${range.start}&to=${range.end}` : `range=${range.key}`;
+}
+
+/** Appends the current preview/clientId state (if any) so cross-page links don't drop it. */
+export function withPreviewParams(qs: string, sp: RangeSearchParams): string {
+  if (!sp.preview || !sp.clientId) return qs;
+  return `${qs}&preview=${sp.preview}&clientId=${sp.clientId}&client=${encodeURIComponent(sp.client ?? "")}`;
 }

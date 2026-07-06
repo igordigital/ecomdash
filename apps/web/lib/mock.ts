@@ -3,7 +3,18 @@
  * When the pipeline lands, replace this module with real queries;
  * page components should not change.
  *
- * Generated deterministically (seeded RNG) with planted stories:
+ * Every "get*" function takes a clientId (see lib/viewed-client.ts for how
+ * pages resolve which client is being viewed) plus a ResolvedRange, and
+ * returns the current period plus, where relevant, the prior period of
+ * equal length for comparison. Each client gets its own deterministic
+ * dataset: a wide per-client scale factor (clientJitter) makes different
+ * clients look like genuinely different-sized, differently-performing
+ * businesses, not just noise on the same numbers, while a narrower
+ * per-range jitter (jitter) makes entity tables (campaigns, ads, products)
+ * vary sensibly across date ranges without looking mechanically scaled.
+ *
+ * Generated deterministically (seeded RNG) with planted stories that apply
+ * to every client's daily series, scaled by that client's own numbers:
  * - a checkout outage 10-12 days ago (revenue dip, MER drop, flagged)
  * - a Meta budget scale-up over the last 5 days (spend up, CTR softening,
  *   frequency climbing, MER holding)
@@ -11,11 +22,10 @@
  * sessions, session CVR reconciles orders with traffic, and the MER
  * numerator only ever comes from store revenue (Invariant 1).
  *
- * All "get*" functions take a ResolvedRange (see lib/range.ts) and return
- * the current period plus, where relevant, the prior period of equal length
- * for comparison. Entity tables (campaigns, ads, products) are static
- * 28-day baselines scaled deterministically to the selected range; the real
- * pipeline will instead filter mart rows by date, so no page logic changes.
+ * Entity tables (campaigns, ads, products) share the same template names
+ * across clients (so every client has an "Advantage+ Shopping" campaign,
+ * for example) with per-client numbers; the real pipeline will instead
+ * filter mart rows by client_id and date, so no page logic changes.
  */
 
 import { addDays, chartRange, previousRange, type ResolvedRange } from "./range";
@@ -45,6 +55,11 @@ function jitter(seed: string): number {
   return 0.9 + mulberry32(hashSeed(seed))() * 0.2;
 }
 
+/** Deterministic 0.5-1.8 multiplier: makes different clients read as differently sized businesses, not just noise. */
+function clientJitter(clientId: string, salt: string): number {
+  return 0.5 + mulberry32(hashSeed(`${clientId}:${salt}`))() * 1.3;
+}
+
 function sliceByDate<T extends { date: string }>(arr: T[], start: string, end: string): T[] {
   return arr.filter((d) => d.date >= start && d.date <= end);
 }
@@ -67,12 +82,15 @@ function buildDates(): string[] {
   return out;
 }
 
+const DATES = buildDates();
+
+/** Calendar bounds are shared across all clients (same "today" for everyone). */
 export function getLatestDate(): string {
-  return DAILY[DAILY.length - 1]!.date;
+  return DATES[DATES.length - 1]!;
 }
 
 export function getEarliestDate(): string {
-  return DAILY[0]!.date;
+  return DATES[0]!;
 }
 
 // ---------------------------------------------------------------------------
@@ -86,15 +104,17 @@ export interface DailyFact {
   orders: number;
 }
 
-function buildDaily(): DailyFact[] {
-  const rng = mulberry32(42);
-  return buildDates().map((date, i) => {
+function buildDaily(clientId: string): DailyFact[] {
+  const scale = clientJitter(clientId, "spend-scale");
+  const merQuality = 2.2 + clientJitter(clientId, "mer-quality") * 2.2; // ~2.2-4.9, this client's blended efficiency
+  const rng = mulberry32(hashSeed(`${clientId}:daily`));
+  return DATES.map((date, i) => {
     const dow = new Date(`${date}T00:00:00Z`).getUTCDay();
     const weekend = dow === 0 || dow === 6;
     const growth = 1 + i * 0.0018;
-    let metaSpend = 820 * growth * (weekend ? 0.92 : 1) * (0.9 + rng() * 0.2);
-    const googleSpend = 430 * growth * (weekend ? 0.8 : 1) * (0.9 + rng() * 0.2);
-    let revenue = (metaSpend + googleSpend) * 3.25 * (weekend ? 1.1 : 1) * (0.85 + rng() * 0.3);
+    let metaSpend = 820 * scale * growth * (weekend ? 0.92 : 1) * (0.9 + rng() * 0.2);
+    const googleSpend = 430 * scale * growth * (weekend ? 0.8 : 1) * (0.9 + rng() * 0.2);
+    let revenue = (metaSpend + googleSpend) * merQuality * (weekend ? 1.1 : 1) * (0.85 + rng() * 0.3);
     if (i >= BUILD_DAYS - 5) metaSpend *= 1.55; // Advantage+ scale-up
     if (i >= BUILD_DAYS - 12 && i <= BUILD_DAYS - 10) revenue *= 0.55; // checkout outage
     const orders = Math.round(revenue / (95 + rng() * 30));
@@ -102,7 +122,15 @@ function buildDaily(): DailyFact[] {
   });
 }
 
-const DAILY = buildDaily();
+const dailyCache = new Map<string, DailyFact[]>();
+function getDaily(clientId: string): DailyFact[] {
+  let d = dailyCache.get(clientId);
+  if (!d) {
+    d = buildDaily(clientId);
+    dailyCache.set(clientId, d);
+  }
+  return d;
+}
 
 function aggBlended(days: DailyFact[]) {
   return days.reduce(
@@ -119,9 +147,9 @@ export interface MerPoint {
   mer: number | null;
 }
 
-function rollingMer(windowDays: number): (number | null)[] {
+function rollingMer(daily: DailyFact[], windowDays: number): (number | null)[] {
   const out: (number | null)[] = [];
-  for (let i = 0; i < DAILY.length; i++) {
+  for (let i = 0; i < daily.length; i++) {
     if (i + 1 < windowDays) {
       out.push(null);
       continue;
@@ -129,8 +157,8 @@ function rollingMer(windowDays: number): (number | null)[] {
     let spend = 0;
     let revenue = 0;
     for (let j = i - windowDays + 1; j <= i; j++) {
-      spend += DAILY[j]!.metaSpend + DAILY[j]!.googleSpend;
-      revenue += DAILY[j]!.revenue;
+      spend += daily[j]!.metaSpend + daily[j]!.googleSpend;
+      revenue += daily[j]!.revenue;
     }
     out.push(spend > 0 ? r2(revenue / spend) : null);
   }
@@ -138,11 +166,12 @@ function rollingMer(windowDays: number): (number | null)[] {
 }
 
 /** Trend chart data: MER computed with a rolling window matching the selected range, over the chart's trailing context window. */
-export function getMerSeries(range: ResolvedRange): MerPoint[] {
-  const merByIndex = rollingMer(range.days);
+export function getMerSeries(clientId: string, range: ResolvedRange): MerPoint[] {
+  const daily = getDaily(clientId);
+  const merByIndex = rollingMer(daily, range.days);
   const win = chartRange(range);
   const points: MerPoint[] = [];
-  DAILY.forEach((d, i) => {
+  daily.forEach((d, i) => {
     if (d.date < win.start || d.date > win.end) return;
     points.push({ date: d.date, metaSpend: d.metaSpend, googleSpend: d.googleSpend, revenue: d.revenue, mer: merByIndex[i] ?? null });
   });
@@ -162,10 +191,11 @@ export interface OverviewKpis {
   ordersPrev: number;
 }
 
-export function getOverviewKpis(range: ResolvedRange): OverviewKpis {
-  const cur = aggBlended(sliceByDate(DAILY, range.start, range.end));
+export function getOverviewKpis(clientId: string, range: ResolvedRange): OverviewKpis {
+  const daily = getDaily(clientId);
+  const cur = aggBlended(sliceByDate(daily, range.start, range.end));
   const pr = previousRange(range);
-  const prev = aggBlended(sliceByDate(DAILY, pr.start, pr.end));
+  const prev = aggBlended(sliceByDate(daily, pr.start, pr.end));
   return {
     mer: cur.spend > 0 ? r2(cur.revenue / cur.spend) : 0,
     merPrev: prev.spend > 0 ? r2(prev.revenue / prev.spend) : 0,
@@ -207,7 +237,8 @@ const ROLLING_DEFS: { key: "1d" | "7d" | "30d"; label: string; days: number }[] 
   { key: "30d", label: "30D", days: 30 },
 ];
 
-export function getRollingWindows(): RollingWindows {
+export function getRollingWindows(clientId: string): RollingWindows {
+  const daily = getDaily(clientId);
   const end = getLatestDate();
   const mer: RollingPoint[] = [];
   const spend: RollingPoint[] = [];
@@ -217,8 +248,8 @@ export function getRollingWindows(): RollingWindows {
     const start = addDays(end, -(def.days - 1));
     const prevEnd = addDays(start, -1);
     const prevStart = addDays(prevEnd, -(def.days - 1));
-    const cur = aggBlended(sliceByDate(DAILY, start, end));
-    const prev = aggBlended(sliceByDate(DAILY, prevStart, prevEnd));
+    const cur = aggBlended(sliceByDate(daily, start, end));
+    const prev = aggBlended(sliceByDate(daily, prevStart, prevEnd));
     mer.push({
       key: def.key,
       label: def.label,
@@ -230,7 +261,7 @@ export function getRollingWindows(): RollingWindows {
     orders.push({ key: def.key, label: def.label, value: cur.orders, previous: prev.orders });
   }
   const spark14 = sparkBounds(end);
-  const last14 = sliceByDate(DAILY, spark14.start, spark14.end);
+  const last14 = sliceByDate(daily, spark14.start, spark14.end);
   return {
     mer,
     spend,
@@ -259,9 +290,10 @@ export interface PlatformDay {
   convValue: number; // DIAGNOSTIC
 }
 
-function buildPlatformDaily(platform: "meta" | "google"): PlatformDay[] {
-  const rng = mulberry32(platform === "meta" ? 101 : 202);
-  return DAILY.map((d, i) => {
+function buildPlatformDaily(clientId: string, platform: "meta" | "google"): PlatformDay[] {
+  const daily = getDaily(clientId);
+  const rng = mulberry32(hashSeed(`${clientId}:${platform}`));
+  return daily.map((d, i) => {
     const spend = platform === "meta" ? d.metaSpend : d.googleSpend;
     let impressions: number;
     let clicks: number;
@@ -289,8 +321,16 @@ function buildPlatformDaily(platform: "meta" | "google"): PlatformDay[] {
   });
 }
 
-const META_DAILY = buildPlatformDaily("meta");
-const GOOGLE_DAILY = buildPlatformDaily("google");
+const platformDailyCache = new Map<string, PlatformDay[]>();
+function getPlatformDaily(clientId: string, platform: "meta" | "google"): PlatformDay[] {
+  const key = `${clientId}:${platform}`;
+  let d = platformDailyCache.get(key);
+  if (!d) {
+    d = buildPlatformDaily(clientId, platform);
+    platformDailyCache.set(key, d);
+  }
+  return d;
+}
 
 export interface NetworkStats {
   spend: number;
@@ -360,8 +400,8 @@ export interface NetworkKpis {
   sparkRoas: number[];
 }
 
-export function getNetworkKpis(platform: "meta" | "google", range: ResolvedRange): NetworkKpis {
-  const daily = platform === "meta" ? META_DAILY : GOOGLE_DAILY;
+export function getNetworkKpis(clientId: string, platform: "meta" | "google", range: ResolvedRange): NetworkKpis {
+  const daily = getPlatformDaily(clientId, platform);
   const cur = sliceByDate(daily, range.start, range.end);
   const pr = previousRange(range);
   const prev = sliceByDate(daily, pr.start, pr.end);
@@ -401,9 +441,10 @@ export interface StoreDay {
   newShare: number; // share of orders from new customers
 }
 
-function buildStoreDaily(): StoreDay[] {
-  const rng = mulberry32(9);
-  return DAILY.map((d) => {
+function buildStoreDaily(clientId: string): StoreDay[] {
+  const daily = getDaily(clientId);
+  const rng = mulberry32(hashSeed(`${clientId}:store`));
+  return daily.map((d) => {
     const refunds = r2(d.revenue * (0.025 + rng() * 0.03));
     return {
       date: d.date,
@@ -417,8 +458,15 @@ function buildStoreDaily(): StoreDay[] {
   });
 }
 
-const STORE_DAILY = buildStoreDaily();
-const STORE_BY_DATE = new Map(STORE_DAILY.map((d) => [d.date, d]));
+const storeDailyCache = new Map<string, StoreDay[]>();
+function getStoreDaily(clientId: string): StoreDay[] {
+  let d = storeDailyCache.get(clientId);
+  if (!d) {
+    d = buildStoreDaily(clientId);
+    storeDailyCache.set(clientId, d);
+  }
+  return d;
+}
 
 export interface StoreStats {
   revenue: number;
@@ -443,12 +491,16 @@ function aggStore(days: StoreDay[]): StoreStats {
   };
 }
 
-export function getStoreKpis(range: ResolvedRange): { cur: StoreStats; prev: StoreStats; daily: StoreDay[] } {
-  const cur = aggStore(sliceByDate(STORE_DAILY, range.start, range.end));
+export function getStoreKpis(
+  clientId: string,
+  range: ResolvedRange,
+): { cur: StoreStats; prev: StoreStats; daily: StoreDay[] } {
+  const storeDaily = getStoreDaily(clientId);
+  const cur = aggStore(sliceByDate(storeDaily, range.start, range.end));
   const pr = previousRange(range);
-  const prev = aggStore(sliceByDate(STORE_DAILY, pr.start, pr.end));
+  const prev = aggStore(sliceByDate(storeDaily, pr.start, pr.end));
   const win = chartRange(range);
-  return { cur, prev, daily: sliceByDate(STORE_DAILY, win.start, win.end) };
+  return { cur, prev, daily: sliceByDate(storeDaily, win.start, win.end) };
 }
 
 // ---------------------------------------------------------------------------
@@ -479,12 +531,13 @@ const BASE_PRODUCTS: Product[] = [
   { name: "Lumen Headlamp 400", sku: "LM-HL-04", units: 143, revenue: 5713, price: 39.9, stock: "in_stock", deltaPct: 0.14 },
 ];
 
-export function getTopProducts(range: ResolvedRange): Product[] {
+export function getTopProducts(clientId: string, range: ResolvedRange): Product[] {
   const factor = range.days / 28;
+  const scale = clientJitter(clientId, "products-scale");
   return BASE_PRODUCTS.map((p) => {
-    const seed = `${p.sku}:${range.key}:${range.days}`;
+    const seed = `${clientId}:${p.sku}:${range.key}:${range.days}`;
     const j = jitter(seed);
-    const units = Math.max(0, Math.round(p.units * factor * j));
+    const units = Math.max(0, Math.round(p.units * factor * scale * j));
     const revenue = r2(units * p.price);
     const deltaJ = mulberry32(hashSeed(seed + ":delta"))();
     const deltaPct = r4(p.deltaPct * (0.7 + deltaJ * 0.6));
@@ -501,21 +554,21 @@ export interface FunnelStage {
   prev: number;
 }
 
-function siteFunnelStage(start: string, end: string) {
-  const traffic = sliceByDate(getTrafficSeriesFull(), start, end);
+function siteFunnelStage(clientId: string, start: string, end: string) {
+  const traffic = sliceByDate(getTrafficSeriesFull(clientId), start, end);
   const sessions = traffic.reduce((s, row) => s + CHANNELS.reduce((t, ch) => t + Number(row[ch] ?? 0), 0), 0);
-  const orders = sliceByDate(STORE_DAILY, start, end).reduce((s, d) => s + d.orders, 0);
-  const rng = mulberry32(hashSeed(`funnel:${start}:${end}`));
+  const orders = sliceByDate(getStoreDaily(clientId), start, end).reduce((s, d) => s + d.orders, 0);
+  const rng = mulberry32(hashSeed(`${clientId}:funnel:${start}:${end}`));
   const atc = Math.round(sessions * (0.079 + rng() * 0.004));
   const checkout = Math.round(atc * (0.6 + rng() * 0.03));
   return { sessions, atc, checkout, orders };
 }
 
 /** Site funnel from GA4 + store: sessions -> add to cart -> checkout -> orders. */
-export function getSiteFunnel(range: ResolvedRange): FunnelStage[] {
-  const cur = siteFunnelStage(range.start, range.end);
+export function getSiteFunnel(clientId: string, range: ResolvedRange): FunnelStage[] {
+  const cur = siteFunnelStage(clientId, range.start, range.end);
   const pr = previousRange(range);
-  const prev = siteFunnelStage(pr.start, pr.end);
+  const prev = siteFunnelStage(clientId, pr.start, pr.end);
   return [
     { label: "Sessions", value: cur.sessions, prev: prev.sessions },
     { label: "Add to cart", value: cur.atc, prev: prev.atc },
@@ -525,8 +578,8 @@ export function getSiteFunnel(range: ResolvedRange): FunnelStage[] {
 }
 
 /** Network funnel from the platform's own reporting (diagnostic attribution). */
-export function getNetworkFunnel(platform: "meta" | "google", range: ResolvedRange): FunnelStage[] {
-  const daily = platform === "meta" ? META_DAILY : GOOGLE_DAILY;
+export function getNetworkFunnel(clientId: string, platform: "meta" | "google", range: ResolvedRange): FunnelStage[] {
+  const daily = getPlatformDaily(clientId, platform);
   const cur = aggNetwork(sliceByDate(daily, range.start, range.end));
   const pr = previousRange(range);
   const prev = aggNetwork(sliceByDate(daily, pr.start, pr.end));
@@ -545,13 +598,14 @@ export interface FunnelTrendPoint {
   abandonment: number; // 1 - orders / add-to-carts
 }
 
-export function getFunnelTrend(range: ResolvedRange): FunnelTrendPoint[] {
+export function getFunnelTrend(clientId: string, range: ResolvedRange): FunnelTrendPoint[] {
   const win = chartRange(range);
-  return sliceByDate(getTrafficSeriesFull(), win.start, win.end).map((row) => {
+  const storeByDate = new Map(getStoreDaily(clientId).map((d) => [d.date, d]));
+  return sliceByDate(getTrafficSeriesFull(clientId), win.start, win.end).map((row) => {
     const date = String(row.date);
     const sessions = CHANNELS.reduce((t, ch) => t + Number(row[ch] ?? 0), 0);
-    const orders = STORE_BY_DATE.get(date)?.orders ?? 0;
-    const localRng = mulberry32(hashSeed(date));
+    const orders = storeByDate.get(date)?.orders ?? 0;
+    const localRng = mulberry32(hashSeed(`${clientId}:${date}`));
     const atc = Math.round(sessions * (0.075 + localRng() * 0.012));
     return {
       date,
@@ -562,7 +616,7 @@ export function getFunnelTrend(range: ResolvedRange): FunnelTrendPoint[] {
 }
 
 // ---------------------------------------------------------------------------
-// Campaign health (28d baseline, scaled to the selected range)
+// Campaign health (28d baseline, scaled to the selected range and client)
 // ---------------------------------------------------------------------------
 export type Health = "scaling" | "healthy" | "watch" | "fatigued" | "inefficient";
 
@@ -593,26 +647,27 @@ const BASE_CAMPAIGNS: CampaignHealth[] = [
 
 const BASELINE_DAYS = 28;
 
-export function getCampaignHealth(range: ResolvedRange): CampaignHealth[] {
+export function getCampaignHealth(clientId: string, range: ResolvedRange): CampaignHealth[] {
   const factor = range.days / BASELINE_DAYS;
+  const scale = clientJitter(clientId, "campaigns-scale");
   const rows = BASE_CAMPAIGNS.map((c) => {
-    const seed = `${c.platform}:${c.name}:${range.key}:${range.days}`;
+    const seed = `${clientId}:${c.platform}:${c.name}:${range.key}:${range.days}`;
     const j = jitter(seed);
-    const roasJ = 0.95 + mulberry32(hashSeed(seed + ":roas"))() * 0.1;
+    const roasJ = 0.7 + clientJitter(clientId, `${c.name}:roas`) * 0.6;
     return {
       ...c,
-      spend: r2(c.spend * factor * j),
-      impressions: Math.round(c.impressions * factor * j),
-      clicks: Math.round(c.clicks * factor * j),
+      spend: r2(c.spend * factor * scale * j),
+      impressions: Math.round(c.impressions * factor * scale * j),
+      clicks: Math.round(c.clicks * factor * scale * j),
       platformRoas: r2(c.platformRoas * roasJ),
-      ga4Sessions: c.ga4Sessions !== null ? Math.round(c.ga4Sessions * factor * j) : null,
+      ga4Sessions: c.ga4Sessions !== null ? Math.round(c.ga4Sessions * factor * scale * j) : null,
     };
   });
   return rows.sort((a, b) => b.spend - a.spend);
 }
 
-export function getUtmMatchRate(range: ResolvedRange): number {
-  const meta = getCampaignHealth(range).filter((c) => c.platform === "meta");
+export function getUtmMatchRate(clientId: string, range: ResolvedRange): number {
+  const meta = getCampaignHealth(clientId, range).filter((c) => c.platform === "meta");
   const total = meta.reduce((s, c) => s + c.spend, 0);
   const matched = meta.filter((c) => c.utmMatched).reduce((s, c) => s + c.spend, 0);
   return total > 0 ? matched / total : 0;
@@ -658,18 +713,19 @@ function scaledFrequency(base: number, factor: number, seed: string): number {
   return r2(Math.max(1, base * Math.sqrt(factor) * j));
 }
 
-export function getMetaAds(range: ResolvedRange): MetaAd[] {
+export function getMetaAds(clientId: string, range: ResolvedRange): MetaAd[] {
   const factor = range.days / BASELINE_DAYS;
+  const scale = clientJitter(clientId, "campaigns-scale"); // same salt as getCampaignHealth so ad-level and campaign-level totals stay proportionate
   const rows = BASE_META_ADS.map((ad) => {
-    const seed = `${ad.campaign}:${ad.name}:${range.key}:${range.days}`;
+    const seed = `${clientId}:${ad.campaign}:${ad.name}:${range.key}:${range.days}`;
     const j = jitter(seed);
     return {
       ...ad,
-      spend: r2(ad.spend * factor * j),
-      impressions: Math.round(ad.impressions * factor * j),
-      clicks: Math.round(ad.clicks * factor * j),
-      purchases: Math.round(ad.purchases * factor * j),
-      convValue: r2(ad.convValue * factor * j),
+      spend: r2(ad.spend * factor * scale * j),
+      impressions: Math.round(ad.impressions * factor * scale * j),
+      clicks: Math.round(ad.clicks * factor * scale * j),
+      purchases: Math.round(ad.purchases * factor * scale * j),
+      convValue: r2(ad.convValue * factor * scale * j),
       frequency: scaledFrequency(ad.frequency, factor, seed + ":freq"),
     };
   });
@@ -685,8 +741,8 @@ export interface CreativeSlice {
   ctr: number;
 }
 
-export function getCreativeBreakdown(range: ResolvedRange): CreativeSlice[] {
-  const ads = getMetaAds(range);
+export function getCreativeBreakdown(clientId: string, range: ResolvedRange): CreativeSlice[] {
+  const ads = getMetaAds(clientId, range);
   const total = ads.reduce((s, a) => s + a.spend, 0);
   const byType = new Map<
     CreativeType,
@@ -734,19 +790,20 @@ const BASE_GOOGLE_CAMPAIGNS: GoogleCampaign[] = [
   { name: "Brand Search", type: "Search", spend: 2980, impressions: 32000, clicks: 2200, conversions: 189, convValue: 25030, impressionShare: 0.87, health: "healthy" },
 ];
 
-export function getGoogleCampaigns(range: ResolvedRange): GoogleCampaign[] {
+export function getGoogleCampaigns(clientId: string, range: ResolvedRange): GoogleCampaign[] {
   const factor = range.days / BASELINE_DAYS;
+  const scale = clientJitter(clientId, "campaigns-scale");
   const rows = BASE_GOOGLE_CAMPAIGNS.map((c) => {
-    const seed = `${c.name}:${range.key}:${range.days}`;
+    const seed = `${clientId}:${c.name}:${range.key}:${range.days}`;
     const j = jitter(seed);
     const isJ = c.impressionShare !== null ? 0.95 + mulberry32(hashSeed(seed + ":is"))() * 0.1 : 1;
     return {
       ...c,
-      spend: r2(c.spend * factor * j),
-      impressions: Math.round(c.impressions * factor * j),
-      clicks: Math.round(c.clicks * factor * j),
-      conversions: Math.round(c.conversions * factor * j),
-      convValue: r2(c.convValue * factor * j),
+      spend: r2(c.spend * factor * scale * j),
+      impressions: Math.round(c.impressions * factor * scale * j),
+      clicks: Math.round(c.clicks * factor * scale * j),
+      conversions: Math.round(c.conversions * factor * scale * j),
+      convValue: r2(c.convValue * factor * scale * j),
       impressionShare: c.impressionShare !== null ? r4(Math.min(1, c.impressionShare * isJ)) : null,
     };
   });
@@ -770,11 +827,13 @@ export interface TrafficDay {
   [channel: string]: number | string;
 }
 
-let trafficCache: TrafficDay[] | null = null;
+const trafficCache = new Map<string, TrafficDay[]>();
 
-function getTrafficSeriesFull(): TrafficDay[] {
-  if (trafficCache) return trafficCache;
-  const rng = mulberry32(7);
+function getTrafficSeriesFull(clientId: string): TrafficDay[] {
+  const cached = trafficCache.get(clientId);
+  if (cached) return cached;
+  const scale = clientJitter(clientId, "traffic-scale");
+  const rng = mulberry32(hashSeed(`${clientId}:traffic`));
   const base: Record<string, number> = {
     "Organic Search": 620,
     "Paid Social": 540,
@@ -783,13 +842,13 @@ function getTrafficSeriesFull(): TrafficDay[] {
     "Email": 150,
     "Referral": 90,
   };
-  trafficCache = buildDates().map((date, i) => {
+  const series = DATES.map((date, i) => {
     const dow = new Date(`${date}T00:00:00Z`).getUTCDay();
     const weekend = dow === 0 || dow === 6;
     const growth = 1 + i * 0.0015;
     const row: TrafficDay = { date };
     for (const ch of CHANNELS) {
-      let v = (base[ch] ?? 100) * growth * (0.85 + rng() * 0.3);
+      let v = (base[ch] ?? 100) * scale * growth * (0.85 + rng() * 0.3);
       if (weekend) v *= ch === "Paid Search" ? 0.75 : ch === "Email" ? 0.7 : 0.95;
       if (ch === "Paid Social" && i >= BUILD_DAYS - 5) v *= 1.5;
       if (ch === "Email" && i % 7 === 3) v *= 2.6;
@@ -797,12 +856,13 @@ function getTrafficSeriesFull(): TrafficDay[] {
     }
     return row;
   });
-  return trafficCache;
+  trafficCache.set(clientId, series);
+  return series;
 }
 
-export function getTrafficSeries(range: ResolvedRange): TrafficDay[] {
+export function getTrafficSeries(clientId: string, range: ResolvedRange): TrafficDay[] {
   const win = chartRange(range);
-  return sliceByDate(getTrafficSeriesFull(), win.start, win.end);
+  return sliceByDate(getTrafficSeriesFull(clientId), win.start, win.end);
 }
 
 export interface ChannelSummary {
@@ -814,8 +874,8 @@ export interface ChannelSummary {
   newUserShare: number;
 }
 
-export function getChannelSummaries(range: ResolvedRange): ChannelSummary[] {
-  const series = sliceByDate(getTrafficSeriesFull(), range.start, range.end);
+export function getChannelSummaries(clientId: string, range: ResolvedRange): ChannelSummary[] {
+  const series = sliceByDate(getTrafficSeriesFull(clientId), range.start, range.end);
   const totals: Record<string, number> = {};
   for (const row of series) {
     for (const ch of CHANNELS) {
@@ -884,9 +944,9 @@ export interface CampaignTraffic {
   utmMatched: boolean;
 }
 
-export function getCampaignTraffic(range: ResolvedRange): CampaignTraffic[] {
-  const rows: CampaignTraffic[] = getCampaignHealth(range).map((c) => {
-    const seed = `${c.platform}:${c.name}:campaign-traffic:${range.key}:${range.days}`;
+export function getCampaignTraffic(clientId: string, range: ResolvedRange): CampaignTraffic[] {
+  const rows: CampaignTraffic[] = getCampaignHealth(clientId, range).map((c) => {
+    const seed = `${clientId}:${c.platform}:${c.name}:campaign-traffic:${range.key}:${range.days}`;
     const channelGroup = c.platform === "meta" ? "Paid Social" : "Paid Search";
     if (c.ga4Sessions === null || c.ga4EngagementRate === null) {
       return {
@@ -919,10 +979,10 @@ export function getCampaignTraffic(range: ResolvedRange): CampaignTraffic[] {
   });
 
   // Everything without a paid-campaign UTM: organic, direct, email, referral.
-  const notSetSessions = getChannelSummaries(range)
+  const notSetSessions = getChannelSummaries(clientId, range)
     .filter((ch) => ch.channel !== "Paid Social" && ch.channel !== "Paid Search")
     .reduce((s, ch) => s + ch.sessions, 0);
-  const notSetSeed = `not-set:campaign-traffic:${range.key}:${range.days}`;
+  const notSetSeed = `${clientId}:not-set:campaign-traffic:${range.key}:${range.days}`;
   const notSetEco = ecommerceFromSessions(notSetSessions, notSetSeed, [0.012, 0.028], [85, 130]);
   rows.push({
     campaign: "(not set)",
@@ -959,16 +1019,16 @@ export interface ContentTraffic {
  * the content-level join can't succeed either (same UTM match rate shown
  * on the Campaigns page and above).
  */
-export function getContentTraffic(range: ResolvedRange): ContentTraffic[] {
+export function getContentTraffic(clientId: string, range: ResolvedRange): ContentTraffic[] {
   const matchedCampaigns = new Set(
-    getCampaignHealth(range)
+    getCampaignHealth(clientId, range)
       .filter((c) => c.utmMatched)
       .map((c) => c.name),
   );
-  return getMetaAds(range)
+  return getMetaAds(clientId, range)
     .filter((ad) => matchedCampaigns.has(ad.campaign))
     .map((ad) => {
-      const seed = `${ad.campaign}:${ad.name}:content-traffic:${range.key}:${range.days}`;
+      const seed = `${clientId}:${ad.campaign}:${ad.name}:content-traffic:${range.key}:${range.days}`;
       const dropoff = 0.75 + mulberry32(hashSeed(seed + ":sess"))() * 0.2;
       const sessions = Math.max(1, Math.round(ad.clicks * dropoff));
       const engagementRate = r4(0.35 + mulberry32(hashSeed(seed + ":eng"))() * 0.25);
@@ -996,8 +1056,8 @@ export interface TrafficEcommerceSummary {
 }
 
 /** Site-wide GA4 ecommerce rollup (paid campaigns + the not-set bucket = all traffic). DIAGNOSTIC ONLY. */
-export function getTrafficEcommerceSummary(range: ResolvedRange): TrafficEcommerceSummary {
-  const rows = getCampaignTraffic(range);
+export function getTrafficEcommerceSummary(clientId: string, range: ResolvedRange): TrafficEcommerceSummary {
+  const rows = getCampaignTraffic(clientId, range);
   const sessions = rows.reduce((s, r) => s + (r.sessions ?? 0), 0);
   const transactions = rows.reduce((s, r) => s + r.transactions, 0);
   const revenue = r2(rows.reduce((s, r) => s + r.revenue, 0));
@@ -1021,57 +1081,59 @@ export interface Anomaly {
   narrative: string;
 }
 
-const ALL_ANOMALIES: Anomaly[] = (() => {
-  const dates = buildDates();
-  const at = (back: number) => dates[dates.length - 1 - back] ?? "";
-  return [
-    {
-      date: at(11),
-      kind: "mer_move" as const,
-      scope: "Blended",
-      impactAbs: 8400,
-      narrative:
-        "7 day MER fell from 3.4 to 2.4 across three days while spend held steady. Store net revenue dropped about $8,400 against trend. The dip lines up with the checkout errors the store logged in the same window, not with ad performance. Revenue recovered once checkout was fixed.",
-    },
-    {
-      date: at(1),
-      kind: "spend_swing" as const,
-      scope: "Meta | Advantage+ Shopping",
-      impactAbs: 3100,
-      narrative:
-        "Advantage+ Shopping spend is up roughly $620 per day for five straight days, about $3,100 total. This follows the budget increase on the campaign. Blended 7 day MER has held near 3.2 through the scale-up, so the added spend is converting so far. Watch frequency on the top two ads.",
-    },
-    {
-      date: at(2),
-      kind: "conv_rate_drop" as const,
-      scope: "Meta | Retargeting | 30d Viewers",
-      impactAbs: 1900,
-      narrative:
-        "Conversion rate on the free shipping reminder ad fell from 2.4% to 1.5% over the last week while frequency climbed to 8.2. Creative fatigue is the likely cause. About $1,900 of weekly spend sits on this ad. A fresh variant or a frequency cap would protect the retargeting pool.",
-    },
-    {
-      date: at(4),
-      kind: "spend_swing" as const,
-      scope: "Google | Performance Max",
-      impactAbs: 740,
-      narrative:
-        "Performance Max spend dipped $740 against its 7 day average over the weekend, then recovered. Google reports no budget or status changes. This pattern matches normal weekend auction softness for this account and needs no action.",
-    },
-    {
-      date: at(6),
-      kind: "conv_rate_drop" as const,
-      scope: "Google | Non-Brand Search | Core Terms",
-      impactAbs: 520,
-      narrative:
-        "Click-through rate on Non-Brand Search fell about 12% after the ad rotation on the core terms ad group. Platform conversions are down $520 against trend. The two new responsive ads have weaker headlines than the ones they replaced. Worth reverting or testing new copy.",
-    },
-  ];
-})();
+const at = (back: number) => DATES[DATES.length - 1 - back] ?? "";
 
-export function getAnomalies(range: ResolvedRange): Anomaly[] {
-  return ALL_ANOMALIES.filter((a) => a.date >= range.start && a.date <= range.end).sort(
-    (a, b) => b.impactAbs - a.impactAbs,
-  );
+const ANOMALY_TEMPLATES: Omit<Anomaly, "impactAbs">[] = [
+  {
+    date: at(11),
+    kind: "mer_move",
+    scope: "Blended",
+    narrative:
+      "7 day MER fell from 3.4 to 2.4 across three days while spend held steady. Store net revenue dropped against trend. The dip lines up with the checkout errors the store logged in the same window, not with ad performance. Revenue recovered once checkout was fixed.",
+  },
+  {
+    date: at(1),
+    kind: "spend_swing",
+    scope: "Meta | Advantage+ Shopping",
+    narrative:
+      "Advantage+ Shopping spend is up for five straight days following the budget increase on the campaign. Blended 7 day MER has held through the scale-up, so the added spend is converting so far. Watch frequency on the top two ads.",
+  },
+  {
+    date: at(2),
+    kind: "conv_rate_drop",
+    scope: "Meta | Retargeting | 30d Viewers",
+    narrative:
+      "Conversion rate on the free shipping reminder ad fell over the last week while frequency climbed past 8. Creative fatigue is the likely cause. A fresh variant or a frequency cap would protect the retargeting pool.",
+  },
+  {
+    date: at(4),
+    kind: "spend_swing",
+    scope: "Google | Performance Max",
+    narrative:
+      "Performance Max spend dipped against its 7 day average over the weekend, then recovered. Google reports no budget or status changes. This pattern matches normal weekend auction softness for this account and needs no action.",
+  },
+  {
+    date: at(6),
+    kind: "conv_rate_drop",
+    scope: "Google | Non-Brand Search | Core Terms",
+    narrative:
+      "Click-through rate on Non-Brand Search fell after the ad rotation on the core terms ad group. The two new responsive ads have weaker headlines than the ones they replaced. Worth reverting or testing new copy.",
+  },
+];
+
+const BASE_IMPACT: Record<string, number> = {
+  Blended: 8400,
+  "Meta | Advantage+ Shopping": 3100,
+  "Meta | Retargeting | 30d Viewers": 1900,
+  "Google | Performance Max": 740,
+  "Google | Non-Brand Search | Core Terms": 520,
+};
+
+export function getAnomalies(clientId: string, range: ResolvedRange): Anomaly[] {
+  const scale = clientJitter(clientId, "campaigns-scale");
+  return ANOMALY_TEMPLATES.filter((a) => a.date >= range.start && a.date <= range.end)
+    .map((a) => ({ ...a, impactAbs: Math.round((BASE_IMPACT[a.scope] ?? 500) * scale) }))
+    .sort((a, b) => b.impactAbs - a.impactAbs);
 }
 
 export const DEMO_CLIENT = { name: "Acme Outdoors", slug: "acme-outdoors" };

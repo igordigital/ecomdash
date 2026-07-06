@@ -3,6 +3,7 @@ import { RangeSelector } from "@/components/range-selector";
 import { Badge, Card, PageHeader, SectionTitle, StatCard } from "@/components/ui";
 import { fmtDuration, fmtNum, fmtNumCompact, fmtPct, fmtUsd, fmtUsdCompact } from "@/lib/format";
 import { resolveRange, type RangeSearchParams } from "@/lib/range";
+import { resolveViewedClientId } from "@/lib/viewed-client";
 import {
   CHANNELS,
   getCampaignTraffic,
@@ -15,14 +16,16 @@ import {
 } from "@/lib/mock";
 
 export default async function TrafficPage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
+  const sp = await searchParams;
   const earliestDate = getEarliestDate();
   const latestDate = getLatestDate();
-  const range = resolveRange(await searchParams, { earliest: earliestDate, latest: latestDate });
-  const series = getTrafficSeries(range);
-  const channels = getChannelSummaries(range);
-  const campaigns = getCampaignTraffic(range);
-  const content = getContentTraffic(range);
-  const ecommerce = getTrafficEcommerceSummary(range);
+  const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
+  const clientId = await resolveViewedClientId(sp.clientId);
+  const series = getTrafficSeries(clientId, range);
+  const channels = getChannelSummaries(clientId, range);
+  const campaigns = getCampaignTraffic(clientId, range);
+  const content = getContentTraffic(clientId, range);
+  const ecommerce = getTrafficEcommerceSummary(clientId, range);
 
   return (
     <>

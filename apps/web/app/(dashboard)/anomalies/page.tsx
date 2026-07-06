@@ -2,6 +2,7 @@ import { RangeSelector } from "@/components/range-selector";
 import { Badge, Card, PageHeader } from "@/components/ui";
 import { fmtUsd } from "@/lib/format";
 import { resolveRange, type RangeSearchParams } from "@/lib/range";
+import { resolveViewedClientId } from "@/lib/viewed-client";
 import { getAnomalies, getEarliestDate, getLatestDate } from "@/lib/mock";
 
 const KIND_LABEL: Record<string, string> = {
@@ -11,10 +12,12 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 export default async function AnomaliesPage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
+  const sp = await searchParams;
   const earliestDate = getEarliestDate();
   const latestDate = getLatestDate();
-  const range = resolveRange(await searchParams, { earliest: earliestDate, latest: latestDate });
-  const anomalies = getAnomalies(range);
+  const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
+  const clientId = await resolveViewedClientId(sp.clientId);
+  const anomalies = getAnomalies(clientId, range);
 
   return (
     <>

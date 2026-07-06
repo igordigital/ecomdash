@@ -3,6 +3,7 @@ import { RangeSelector } from "@/components/range-selector";
 import { Card, Funnel, PageHeader, SectionTitle } from "@/components/ui";
 import { fmtNumCompact, fmtPct } from "@/lib/format";
 import { resolveRange, type RangeSearchParams } from "@/lib/range";
+import { resolveViewedClientId } from "@/lib/viewed-client";
 import {
   getEarliestDate,
   getFunnelTrend,
@@ -13,16 +14,18 @@ import {
 } from "@/lib/mock";
 
 export default async function FunnelPage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
+  const sp = await searchParams;
   const earliestDate = getEarliestDate();
   const latestDate = getLatestDate();
-  const range = resolveRange(await searchParams, { earliest: earliestDate, latest: latestDate });
+  const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
+  const clientId = await resolveViewedClientId(sp.clientId);
 
-  const site = getSiteFunnel(range);
-  const metaFunnel = getNetworkFunnel("meta", range);
-  const googleFunnel = getNetworkFunnel("google", range);
-  const meta = getNetworkKpis("meta", range);
-  const google = getNetworkKpis("google", range);
-  const trend = getFunnelTrend(range);
+  const site = getSiteFunnel(clientId, range);
+  const metaFunnel = getNetworkFunnel(clientId, "meta", range);
+  const googleFunnel = getNetworkFunnel(clientId, "google", range);
+  const meta = getNetworkKpis(clientId, "meta", range);
+  const google = getNetworkKpis(clientId, "google", range);
+  const trend = getFunnelTrend(clientId, range);
 
   const sessions = site[0]?.value ?? 0;
   const orders = site.at(-1)?.value ?? 0;

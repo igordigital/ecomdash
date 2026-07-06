@@ -53,3 +53,18 @@ export function ClientSwitcher({ clients }: { clients: ClientOption[] }) {
     </select>
   );
 }
+
+/**
+ * The header's client-name label. For a real Client-role session this is
+ * fixed (their own client, passed from the server-verified session). For
+ * staff, it must be a client component: the layout can't read searchParams
+ * itself, so without this the name would stay stuck at whatever rendered
+ * on first load instead of following the switcher.
+ */
+export function ViewedClientName({ clients, fixedName }: { clients: ClientOption[]; fixedName: string | null }) {
+  const params = useSearchParams();
+  if (fixedName !== null) return <p className="text-xs text-slate-400">{fixedName}</p>;
+  const currentClientId = params.get("clientId") ?? "";
+  const current = clients.find((c) => c.id === currentClientId);
+  return <p className="text-xs text-slate-400">{current?.name ?? "Agency view"}</p>;
+}

@@ -51,7 +51,21 @@ export async function verifyPassword(password: string, stored: string): Promise<
   return toHex(bits) === hashHex;
 }
 
-const SESSION_SECRET = process.env.SESSION_SECRET ?? "dev-only-insecure-secret-change-in-production";
+/**
+ * Lazy, not a module-level constant: computed only when a session is
+ * actually signed or verified, so `next build`'s static page-data
+ * collection (which imports this module without serving a request) never
+ * trips the production check. That check still refuses to run rather than
+ * silently sign sessions with a secret anyone can read in this public repo.
+ */
+function getSessionSecret(): string {
+  if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("SESSION_SECRET must be set in production. Generate one with: openssl rand -hex 32");
+  }
+  return "dev-only-insecure-secret-change-in-production";
+}
+
 export const SESSION_COOKIE = "ecomdash_session";
 
 export type SessionRole = "admin" | "analyst" | "client";
@@ -64,7 +78,7 @@ export interface SessionPayload {
 }
 
 async function hmacKey(): Promise<CryptoKey> {
-  return crypto.subtle.importKey("raw", encoder.encode(SESSION_SECRET), { name: "HMAC", hash: "SHA-256" }, false, [
+  return crypto.subtle.importKey("raw", encoder.encode(getSessionSecret()), { name: "HMAC", hash: "SHA-256" }, false, [
     "sign",
     "verify",
   ]);

@@ -843,6 +843,173 @@ export function getChannelSummaries(range: ResolvedRange): ChannelSummary[] {
   }).sort((a, b) => b.sessions - a.sessions);
 }
 
+/**
+ * Session -> transaction -> revenue for a GA4 ecommerce breakdown row.
+ * These are GA4's own attributed transactions and revenue: DIAGNOSTIC ONLY,
+ * never a substitute for store net revenue (Invariant 1). Conversion rate
+ * and AOV ranges are seeded per row so they read as plausible, distinct
+ * numbers rather than a mechanical scale of sessions.
+ */
+function ecommerceFromSessions(
+  sessions: number,
+  seed: string,
+  cvrRange: [number, number],
+  aovRange: [number, number],
+): { transactions: number; revenue: number; aov: number } {
+  const cvr = cvrRange[0] + mulberry32(hashSeed(seed + ":cvr"))() * (cvrRange[1] - cvrRange[0]);
+  const aov = aovRange[0] + mulberry32(hashSeed(seed + ":aov"))() * (aovRange[1] - aovRange[0]);
+  const transactions = Math.round(sessions * cvr);
+  const revenue = r2(transactions * aov);
+  return { transactions, revenue, aov: transactions > 0 ? r2(revenue / transactions) : 0 };
+}
+
+// ---------------------------------------------------------------------------
+// Campaign and content (ad) level traffic, with GA4 ecommerce metrics.
+// Google Ads links to GA4 natively via GCLID, so its rows carry sessions
+// and ecommerce data reliably; Meta's link is UTM-dependent (utm_campaign,
+// utm_content), so a campaign with poor tagging shows "no UTM match" here
+// exactly as it does on the Campaigns page, and only Meta contributes
+// content-level (ad/creative) rows in this account.
+// ---------------------------------------------------------------------------
+export interface CampaignTraffic {
+  campaign: string;
+  platform: "meta" | "google" | null; // null = non-paid / untagged bucket
+  channelGroup: string;
+  sessions: number | null; // null = no UTM match
+  engagedSessions: number | null;
+  engagementRate: number | null;
+  transactions: number; // GA4, DIAGNOSTIC ONLY
+  revenue: number; // GA4, DIAGNOSTIC ONLY
+  aov: number;
+  utmMatched: boolean;
+}
+
+export function getCampaignTraffic(range: ResolvedRange): CampaignTraffic[] {
+  const rows: CampaignTraffic[] = getCampaignHealth(range).map((c) => {
+    const seed = `${c.platform}:${c.name}:campaign-traffic:${range.key}:${range.days}`;
+    const channelGroup = c.platform === "meta" ? "Paid Social" : "Paid Search";
+    if (c.ga4Sessions === null || c.ga4EngagementRate === null) {
+      return {
+        campaign: c.name,
+        platform: c.platform,
+        channelGroup,
+        sessions: null,
+        engagedSessions: null,
+        engagementRate: null,
+        transactions: 0,
+        revenue: 0,
+        aov: 0,
+        utmMatched: false,
+      };
+    }
+    const cvrRange: [number, number] = c.platform === "meta" ? [0.01, 0.022] : [0.025, 0.045];
+    const eco = ecommerceFromSessions(c.ga4Sessions, seed, cvrRange, [95, 145]);
+    return {
+      campaign: c.name,
+      platform: c.platform,
+      channelGroup,
+      sessions: c.ga4Sessions,
+      engagedSessions: Math.round(c.ga4Sessions * c.ga4EngagementRate),
+      engagementRate: c.ga4EngagementRate,
+      transactions: eco.transactions,
+      revenue: eco.revenue,
+      aov: eco.aov,
+      utmMatched: true,
+    };
+  });
+
+  // Everything without a paid-campaign UTM: organic, direct, email, referral.
+  const notSetSessions = getChannelSummaries(range)
+    .filter((ch) => ch.channel !== "Paid Social" && ch.channel !== "Paid Search")
+    .reduce((s, ch) => s + ch.sessions, 0);
+  const notSetSeed = `not-set:campaign-traffic:${range.key}:${range.days}`;
+  const notSetEco = ecommerceFromSessions(notSetSessions, notSetSeed, [0.012, 0.028], [85, 130]);
+  rows.push({
+    campaign: "(not set)",
+    platform: null,
+    channelGroup: "Organic, direct, email, referral",
+    sessions: notSetSessions,
+    engagedSessions: Math.round(notSetSessions * 0.52),
+    engagementRate: 0.52,
+    transactions: notSetEco.transactions,
+    revenue: notSetEco.revenue,
+    aov: notSetEco.aov,
+    utmMatched: true,
+  });
+
+  return rows.sort((a, b) => (b.sessions ?? 0) - (a.sessions ?? 0));
+}
+
+export interface ContentTraffic {
+  content: string;
+  campaign: string;
+  sessions: number;
+  engagedSessions: number;
+  engagementRate: number;
+  transactions: number; // GA4, DIAGNOSTIC ONLY
+  revenue: number; // GA4, DIAGNOSTIC ONLY
+  aov: number;
+}
+
+/**
+ * utm_content breakdown. Meta only: Google's GA4 link is native via GCLID
+ * and does not rely on manual content tagging. Ads under a campaign whose
+ * own utm_campaign doesn't match GA4 are excluded: content tags are a
+ * sub-dimension of the campaign tag, so if the campaign-level join fails,
+ * the content-level join can't succeed either (same UTM match rate shown
+ * on the Campaigns page and above).
+ */
+export function getContentTraffic(range: ResolvedRange): ContentTraffic[] {
+  const matchedCampaigns = new Set(
+    getCampaignHealth(range)
+      .filter((c) => c.utmMatched)
+      .map((c) => c.name),
+  );
+  return getMetaAds(range)
+    .filter((ad) => matchedCampaigns.has(ad.campaign))
+    .map((ad) => {
+      const seed = `${ad.campaign}:${ad.name}:content-traffic:${range.key}:${range.days}`;
+      const dropoff = 0.75 + mulberry32(hashSeed(seed + ":sess"))() * 0.2;
+      const sessions = Math.max(1, Math.round(ad.clicks * dropoff));
+      const engagementRate = r4(0.35 + mulberry32(hashSeed(seed + ":eng"))() * 0.25);
+      const eco = ecommerceFromSessions(sessions, seed, [0.012, 0.026], [95, 145]);
+      return {
+        content: ad.name,
+        campaign: ad.campaign,
+        sessions,
+        engagedSessions: Math.round(sessions * engagementRate),
+        engagementRate,
+        transactions: eco.transactions,
+        revenue: eco.revenue,
+        aov: eco.aov,
+      };
+    })
+    .sort((a, b) => b.sessions - a.sessions);
+}
+
+export interface TrafficEcommerceSummary {
+  sessions: number;
+  transactions: number;
+  revenue: number;
+  ecommerceConversionRate: number;
+  aov: number;
+}
+
+/** Site-wide GA4 ecommerce rollup (paid campaigns + the not-set bucket = all traffic). DIAGNOSTIC ONLY. */
+export function getTrafficEcommerceSummary(range: ResolvedRange): TrafficEcommerceSummary {
+  const rows = getCampaignTraffic(range);
+  const sessions = rows.reduce((s, r) => s + (r.sessions ?? 0), 0);
+  const transactions = rows.reduce((s, r) => s + r.transactions, 0);
+  const revenue = r2(rows.reduce((s, r) => s + r.revenue, 0));
+  return {
+    sessions,
+    transactions,
+    revenue,
+    ecommerceConversionRate: sessions > 0 ? r4(transactions / sessions) : 0,
+    aov: transactions > 0 ? r2(revenue / transactions) : 0,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Anomalies (mart_anomalies), ranked by absolute impact, not percentage.
 // ---------------------------------------------------------------------------

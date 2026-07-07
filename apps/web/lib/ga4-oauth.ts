@@ -8,7 +8,11 @@
  * registered with Google, not a separate one per integration.
  */
 
-const GA4_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
+// analytics.readonly alone issues a token with no identity info on it at
+// all; userinfo then 401s ("missing required authentication credential")
+// because the token carries no scope userinfo recognizes. openid+email get
+// the connected account's address onto the token too.
+const GA4_SCOPE = "openid email https://www.googleapis.com/auth/analytics.readonly";
 const CALLBACK_PATH = "/api/admin/integrations/ga4/callback";
 
 /**

@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
     return redirectWithStatus(origin, "connected");
   } catch (err) {
     console.error("GA4 OAuth callback failed", err);
-    return redirectWithStatus(origin, "error", "exchange_failed");
+    const detail = err instanceof Error ? err.message : String(err);
+    return redirectWithStatus(origin, "error", detail.slice(0, 300));
   }
 }

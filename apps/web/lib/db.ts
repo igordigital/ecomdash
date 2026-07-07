@@ -200,6 +200,7 @@ export interface FactGa4TrafficTable {
   new_users: Generated<string>;
   total_users: Generated<string>;
   add_to_carts: Generated<string>;
+  transactions: Generated<string>;
   loaded_at: Generated<Timestamp>;
 }
 

@@ -44,6 +44,7 @@ async function upsertGa4Traffic(clientId: string, rows: Ga4TrafficReportRow[]): 
         new_users: String(r.newUsers),
         total_users: String(r.totalUsers),
         add_to_carts: String(r.addToCarts),
+        transactions: String(r.transactions),
       })),
     )
     .onConflict((oc) =>
@@ -56,6 +57,7 @@ async function upsertGa4Traffic(clientId: string, rows: Ga4TrafficReportRow[]): 
         new_users: eb.ref("excluded.new_users"),
         total_users: eb.ref("excluded.total_users"),
         add_to_carts: eb.ref("excluded.add_to_carts"),
+        transactions: eb.ref("excluded.transactions"),
         loaded_at: new Date(),
       })),
     )

@@ -67,11 +67,11 @@ export default async function TrafficPage({ searchParams }: { searchParams: Prom
                 <tr className="border-b border-slate-800 text-left text-xs uppercase tracking-wide text-slate-500">
                   <th className="pb-2 pr-4 font-medium">Channel</th>
                   <th className="pb-2 pr-4 text-right font-medium">Sessions</th>
-                  <th className="pb-2 pr-4 text-right font-medium">Engagement rate</th>
+                  <th className="pb-2 pr-4 text-right font-medium">Eng. rate</th>
                   <th className="pb-2 pr-4 text-right font-medium">Avg session</th>
-                  <th className="pb-2 pr-4 text-right font-medium">Bounce rate</th>
                   <th className="pb-2 pr-4 text-right font-medium">New users</th>
-                  <th className="pb-2 text-right font-medium">Add to carts</th>
+                  <th className="pb-2 pr-4 text-right font-medium">Add to carts</th>
+                  <th className="pb-2 text-right font-medium">Transactions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
@@ -81,9 +81,9 @@ export default async function TrafficPage({ searchParams }: { searchParams: Prom
                     <td className="py-2.5 pr-4 text-right tabular-nums">{fmtNum(ch.sessions)}</td>
                     <td className="py-2.5 pr-4 text-right tabular-nums">{fmtPct(ch.engagementRate)}</td>
                     <td className="py-2.5 pr-4 text-right tabular-nums">{fmtDuration(ch.avgSessionDuration)}</td>
-                    <td className="py-2.5 pr-4 text-right tabular-nums">{fmtPct(ch.bounceRate)}</td>
                     <td className="py-2.5 pr-4 text-right tabular-nums">{fmtPct(ch.newUserShare)}</td>
-                    <td className="py-2.5 text-right tabular-nums">{fmtNum(ch.addToCarts)}</td>
+                    <td className="py-2.5 pr-4 text-right tabular-nums">{fmtNum(ch.addToCarts)}</td>
+                    <td className="py-2.5 text-right tabular-nums">{fmtNum(ch.transactions)}</td>
                   </tr>
                 ))}
               </tbody>

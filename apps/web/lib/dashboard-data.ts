@@ -943,6 +943,7 @@ export interface ChannelSummary {
   bounceRate: number;
   newUserShare: number;
   addToCarts: number;
+  transactions: number;
 }
 
 export async function getChannelSummaries(clientId: string, range: ResolvedRange): Promise<ChannelSummary[]> {
@@ -955,6 +956,7 @@ export async function getChannelSummaries(clientId: string, range: ResolvedRange
     new_users: string | null;
     total_users: string | null;
     add_to_carts: string | null;
+    transactions: string | null;
   }>`
     select
       channel_group,
@@ -964,7 +966,8 @@ export async function getChannelSummaries(clientId: string, range: ResolvedRange
       sum(bounce_rate * sessions) as bounce,
       sum(new_users) as new_users,
       sum(total_users) as total_users,
-      sum(add_to_carts) as add_to_carts
+      sum(add_to_carts) as add_to_carts,
+      sum(transactions) as transactions
     from fact_ga4_traffic
     where client_id = ${clientId}::uuid and date between ${range.start}::date and ${range.end}::date
     group by channel_group
@@ -980,6 +983,7 @@ export async function getChannelSummaries(clientId: string, range: ResolvedRange
         bounceRate: sessions > 0 ? r4(num(r.bounce) / sessions) : 0,
         newUserShare: num(r.total_users) > 0 ? r4(num(r.new_users) / num(r.total_users)) : 0,
         addToCarts: Math.round(num(r.add_to_carts)),
+        transactions: Math.round(num(r.transactions)),
       };
     })
     .sort((a, b) => b.sessions - a.sessions)

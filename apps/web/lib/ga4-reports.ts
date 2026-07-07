@@ -53,6 +53,7 @@ export interface Ga4TrafficReportRow {
   newUsers: number;
   totalUsers: number;
   addToCarts: number;
+  transactions: number;
 }
 
 const ymdToIso = (ymd: string) => `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}`;
@@ -63,7 +64,17 @@ export async function fetchGa4TrafficReport(accessToken: string, propertyId: str
     propertyId,
     date,
     ["date", "sessionDefaultChannelGroup", "sessionSourceMedium"],
-    ["sessions", "engagedSessions", "engagementRate", "averageSessionDuration", "bounceRate", "newUsers", "totalUsers", "addToCarts"],
+    [
+      "sessions",
+      "engagedSessions",
+      "engagementRate",
+      "averageSessionDuration",
+      "bounceRate",
+      "newUsers",
+      "totalUsers",
+      "addToCarts",
+      "transactions",
+    ],
   );
   return rows.map((r) => ({
     date: ymdToIso(r.date!),
@@ -77,6 +88,7 @@ export async function fetchGa4TrafficReport(accessToken: string, propertyId: str
     newUsers: Number(r.newUsers ?? 0),
     totalUsers: Number(r.totalUsers ?? 0),
     addToCarts: Number(r.addToCarts ?? 0),
+    transactions: Number(r.transactions ?? 0),
   }));
 }
 

@@ -6,6 +6,7 @@ import { hashPassword, signSession, SESSION_COOKIE, verifyPassword } from "./aut
 import {
   archiveClient,
   assignUserClient,
+  connectClientAccount,
   createClientRecord,
   createUserRecord,
   deleteClient,
@@ -16,6 +17,7 @@ import {
   startBackfill as startBackfillRecord,
   unarchiveClient,
   type BackfillSourceKey,
+  type ConnectablePlatform,
   type Role,
 } from "./admin-store";
 
@@ -164,6 +166,10 @@ export async function unarchiveClientAction(clientId: string): Promise<void> {
 export async function deleteClientAction(clientId: string): Promise<void> {
   await deleteClient(clientId);
   redirect("/admin/clients");
+}
+
+export async function connectClientAccountAction(clientId: string, platform: ConnectablePlatform, externalId: string): Promise<void> {
+  await connectClientAccount(clientId, platform, externalId);
 }
 
 export async function redirectToClient(clientId: string): Promise<void> {

@@ -1,19 +1,25 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminPageHeader, BackfillBadge, ClientStatusBadge, ConnectionStatusBadge } from "@/components/admin/ui";
-import { ArchiveClientToggle, DeleteClientControl } from "@/components/admin/row-actions";
+import { ArchiveClientToggle, ConnectAccountControl, DeleteClientControl } from "@/components/admin/row-actions";
 import { BackfillForm, type BackfillSourceRow } from "@/components/admin/backfill-form";
 import { Card } from "@/components/ui";
-import { getClient, getClientBackfillSummary, getUsers } from "@/lib/admin-store";
+import { getClient, getClientBackfillSummary, getGa4Properties, getGoogleAccounts, getMetaAccounts, getUsers } from "@/lib/admin-store";
 import { addDays } from "@/lib/range";
 import { getLatestDate } from "@/lib/dashboard-data";
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const client = await getClient(id);
+  const [client, users, googleAccounts, metaAccounts, ga4Properties] = await Promise.all([
+    getClient(id),
+    getUsers(),
+    getGoogleAccounts(),
+    getMetaAccounts(),
+    getGa4Properties(),
+  ]);
   if (!client) notFound();
 
-  const clientUsers = (await getUsers()).filter((u) => u.clientId === client.id);
+  const clientUsers = users.filter((u) => u.clientId === client.id);
 
   const latestDate = getLatestDate();
   const sourceRows: BackfillSourceRow[] = [
@@ -91,45 +97,33 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Google Ads">
-          {client.google ? (
-            <div className="flex items-center justify-between text-sm">
-              <div>
-                <p className="text-slate-200">{client.google.name}</p>
-                <p className="text-xs text-slate-500">{client.google.customerId}</p>
-              </div>
-              <ConnectionStatusBadge status={client.google.status} />
-            </div>
-          ) : (
-            <EmptyConnection label="Google Ads account" />
-          )}
+          <ConnectAccountControl
+            clientId={client.id}
+            platform="google"
+            label="Google Ads accounts"
+            current={client.google ? { externalId: client.google.customerId, name: client.google.name, status: client.google.status } : null}
+            options={googleAccounts.map((a) => ({ externalId: a.customerId, name: a.name, secondary: a.customerId }))}
+          />
         </Card>
 
         <Card title="Meta Ads">
-          {client.meta ? (
-            <div className="flex items-center justify-between text-sm">
-              <div>
-                <p className="text-slate-200">{client.meta.name}</p>
-                <p className="text-xs text-slate-500">{client.meta.accountId}</p>
-              </div>
-              <ConnectionStatusBadge status={client.meta.status} />
-            </div>
-          ) : (
-            <EmptyConnection label="Meta ad account" />
-          )}
+          <ConnectAccountControl
+            clientId={client.id}
+            platform="meta"
+            label="Meta ad accounts"
+            current={client.meta ? { externalId: client.meta.accountId, name: client.meta.name, status: client.meta.status } : null}
+            options={metaAccounts.map((a) => ({ externalId: a.accountId, name: a.name, secondary: a.accountId }))}
+          />
         </Card>
 
         <Card title="GA4">
-          {client.ga4 ? (
-            <div className="flex items-center justify-between text-sm">
-              <div>
-                <p className="text-slate-200">{client.ga4.name}</p>
-                <p className="text-xs text-slate-500">{client.ga4.propertyId}</p>
-              </div>
-              <ConnectionStatusBadge status={client.ga4.status} />
-            </div>
-          ) : (
-            <EmptyConnection label="GA4 property" />
-          )}
+          <ConnectAccountControl
+            clientId={client.id}
+            platform="ga4"
+            label="GA4 properties"
+            current={client.ga4 ? { externalId: client.ga4.propertyId, name: client.ga4.name, status: client.ga4.status } : null}
+            options={ga4Properties.map((p) => ({ externalId: p.propertyId, name: p.name, secondary: p.domain }))}
+          />
         </Card>
 
         <Card title="Store">

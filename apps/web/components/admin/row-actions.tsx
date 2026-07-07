@@ -5,11 +5,13 @@ import { useState, useTransition } from "react";
 import {
   archiveClientAction,
   assignUserClientAction,
+  connectClientAccountAction,
   deleteClientAction,
   removeUserAction,
   unarchiveClientAction,
 } from "@/lib/admin-actions";
-import type { AdminClient } from "@/lib/admin-store";
+import { ConnectionStatusBadge } from "@/components/admin/ui";
+import type { AdminClient, ConnectablePlatform, ConnectionStatus } from "@/lib/admin-store";
 
 export function AssignClientSelect({
   userId,
@@ -156,6 +158,90 @@ export function DeleteClientControl({ clientId, clientName }: { clientId: string
           Cancel
         </button>
       </div>
+    </div>
+  );
+}
+
+export interface ConnectAccountOption {
+  externalId: string;
+  name: string;
+  secondary?: string;
+}
+
+/** Assigns one of the agency's already-authorized accounts/properties to this client. Reversible: "Change" reopens the picker. */
+export function ConnectAccountControl({
+  clientId,
+  platform,
+  label,
+  current,
+  options,
+}: {
+  clientId: string;
+  platform: ConnectablePlatform;
+  label: string;
+  current: { externalId: string; name: string; status: ConnectionStatus } | null;
+  options: ConnectAccountOption[];
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [editing, setEditing] = useState(!current);
+  const [selected, setSelected] = useState(current?.externalId ?? options[0]?.externalId ?? "");
+
+  if (!editing && current) {
+    return (
+      <div className="flex items-center justify-between text-sm">
+        <div>
+          <p className="text-slate-200">{current.name}</p>
+          <p className="text-xs text-slate-500">{current.externalId}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <ConnectionStatusBadge status={current.status} />
+          <button type="button" onClick={() => setEditing(true)} className="text-xs text-slate-400 hover:underline">
+            Change
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (options.length === 0) {
+    return <p className="text-sm text-slate-500">No {label} authorized at the agency level yet.</p>;
+  }
+
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      <select
+        value={selected}
+        onChange={(e) => setSelected(e.target.value)}
+        disabled={pending}
+        className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200"
+      >
+        {options.map((o) => (
+          <option key={o.externalId} value={o.externalId}>
+            {o.name}
+            {o.secondary ? ` · ${o.secondary}` : ""}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        disabled={pending || !selected}
+        onClick={() =>
+          startTransition(async () => {
+            await connectClientAccountAction(clientId, platform, selected);
+            setEditing(false);
+            router.refresh();
+          })
+        }
+        className="shrink-0 rounded border border-slate-700 px-2.5 py-1 text-xs font-medium text-slate-300 hover:border-slate-600 disabled:opacity-50"
+      >
+        Connect
+      </button>
+      {current ? (
+        <button type="button" disabled={pending} onClick={() => setEditing(false)} className="shrink-0 text-xs text-slate-500 hover:underline">
+          Cancel
+        </button>
+      ) : null}
     </div>
   );
 }

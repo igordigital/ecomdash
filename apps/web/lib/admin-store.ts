@@ -390,6 +390,30 @@ export async function getAssignedAccountIds(): Promise<{ google: Set<string>; me
   };
 }
 
+export type ConnectablePlatform = "google" | "meta" | "ga4";
+const CONNECT_SOURCE: Record<ConnectablePlatform, "google-ads" | "meta" | "ga4"> = {
+  google: "google-ads",
+  meta: "meta",
+  ga4: "ga4",
+};
+
+/** Assigns (or reassigns) an already agency-authorized account/property to a client, from the client detail page's "Connect" control. */
+export async function connectClientAccount(clientId: string, platform: ConnectablePlatform, externalId: string): Promise<void> {
+  const account =
+    platform === "google"
+      ? (await getGoogleAccounts()).find((a) => a.customerId === externalId)
+      : platform === "meta"
+        ? (await getMetaAccounts()).find((a) => a.accountId === externalId)
+        : (await getGa4Properties()).find((p) => p.propertyId === externalId);
+  if (!account) throw new Error(`Unknown ${platform} account: ${externalId}`);
+
+  await getDb()
+    .insertInto("client_credentials")
+    .values({ client_id: clientId, source: CONNECT_SOURCE[platform], config: { external_id: externalId, name: account.name }, status: "active" })
+    .onConflict((oc) => oc.columns(["client_id", "source"]).doUpdateSet({ config: { external_id: externalId, name: account.name }, status: "active" }))
+    .execute();
+}
+
 export interface NewClientInput {
   name: string;
   timezone: string;

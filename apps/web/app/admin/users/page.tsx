@@ -69,7 +69,7 @@ export default async function UsersPage() {
                   </td>
                   <td className="py-2.5 text-right">
                     {u.role === "client" || staffAllowed ? (
-                      <RemoveUserButton userId={u.id} />
+                      <RemoveUserButton userId={u.id} userName={u.name} />
                     ) : (
                       <span className="text-xs text-slate-700">restricted</span>
                     )}

@@ -46,7 +46,7 @@ export function AssignClientSelect({
   );
 }
 
-export function RemoveUserButton({ userId }: { userId: string }) {
+export function RemoveUserButton({ userId, userName }: { userId: string; userName: string }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -54,12 +54,13 @@ export function RemoveUserButton({ userId }: { userId: string }) {
     <button
       type="button"
       disabled={pending}
-      onClick={() =>
+      onClick={() => {
+        if (!window.confirm(`Remove ${userName}? They will no longer be able to sign in.`)) return;
         startTransition(async () => {
           await removeUserAction(userId);
           router.refresh();
-        })
-      }
+        });
+      }}
       className="text-xs text-red-400 hover:underline disabled:opacity-50"
     >
       Remove

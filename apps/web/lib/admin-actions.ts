@@ -4,14 +4,17 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { hashPassword, signSession, SESSION_COOKIE, verifyPassword } from "./auth";
 import {
+  archiveClient,
   assignUserClient,
   createClientRecord,
   createUserRecord,
+  deleteClient,
   findUserByEmail,
   getUser,
   removeUser as removeUserRecord,
   setUserPassword,
   startBackfill as startBackfillRecord,
+  unarchiveClient,
   type BackfillSourceKey,
   type Role,
 } from "./admin-store";
@@ -148,6 +151,19 @@ export async function startBackfillAction(_prev: BackfillState, formData: FormDa
     };
   }
   return { ok: true };
+}
+
+export async function archiveClientAction(clientId: string): Promise<void> {
+  await archiveClient(clientId);
+}
+
+export async function unarchiveClientAction(clientId: string): Promise<void> {
+  await unarchiveClient(clientId);
+}
+
+export async function deleteClientAction(clientId: string): Promise<void> {
+  await deleteClient(clientId);
+  redirect("/admin/clients");
 }
 
 export async function redirectToClient(clientId: string): Promise<void> {

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AdminPageHeader, BackfillBadge, ConnectionStatusBadge } from "@/components/admin/ui";
+import { AdminPageHeader, BackfillBadge, ClientStatusBadge, ConnectionStatusBadge } from "@/components/admin/ui";
+import { ArchiveClientToggle, DeleteClientControl } from "@/components/admin/row-actions";
 import { BackfillForm, type BackfillSourceRow } from "@/components/admin/backfill-form";
 import { Card } from "@/components/ui";
 import { getClient, getClientBackfillSummary, getUsers } from "@/lib/admin-store";
@@ -61,17 +62,32 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   return (
     <>
       <AdminPageHeader
-        title={client.name}
+        title={
+          <span className="flex items-center gap-2">
+            {client.name}
+            <ClientStatusBadge status={client.status} />
+          </span>
+        }
         description={`${client.slug} · ${client.timezone} · ${client.currency}`}
         right={
-          <Link
-            href={`/?preview=client&clientId=${client.id}&client=${encodeURIComponent(client.name)}`}
-            className="text-sm text-sky-400 hover:underline"
-          >
-            Preview dashboard →
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href={`/?preview=client&clientId=${client.id}&client=${encodeURIComponent(client.name)}`}
+              className="text-sm text-sky-400 hover:underline"
+            >
+              Preview dashboard →
+            </Link>
+            <ArchiveClientToggle clientId={client.id} status={client.status} />
+          </div>
         }
       />
+
+      {client.status === "archived" ? (
+        <div className="mb-4 rounded border border-amber-900/60 bg-amber-950/20 p-3 text-xs text-amber-300">
+          Archived{client.archivedAt ? ` on ${client.archivedAt}` : ""}: this client is skipped by daily and backfill
+          syncs. All historical data is kept, and its dashboard is still viewable. Unarchive to resume syncing.
+        </div>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Google Ads">
@@ -144,18 +160,24 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             <BackfillBadge status={getClientBackfillSummary(client)} />
             <p className="text-xs text-slate-600">Overall, across connected sources</p>
           </div>
-          <BackfillForm
-            clientId={client.id}
-            sources={sourceRows}
-            defaultStart={defaultStart}
-            defaultEnd={defaultEnd}
-            minDate={addDays(latestDate, -730)}
-            maxDate={latestDate}
-          />
-          <p className="mt-3 text-xs text-slate-500">
-            In production this enqueues day-grain jobs per source into the pg-boss queue (jobs/src/backfill.ts) and
-            each (client, source, date) outcome is tracked in ingest_jobs so it is resumable.
-          </p>
+          {client.status === "archived" ? (
+            <p className="text-sm text-slate-500">Unarchive this client to run a backfill.</p>
+          ) : (
+            <>
+              <BackfillForm
+                clientId={client.id}
+                sources={sourceRows}
+                defaultStart={defaultStart}
+                defaultEnd={defaultEnd}
+                minDate={addDays(latestDate, -730)}
+                maxDate={latestDate}
+              />
+              <p className="mt-3 text-xs text-slate-500">
+                In production this enqueues day-grain jobs per source into the pg-boss queue (jobs/src/backfill.ts)
+                and each (client, source, date) outcome is tracked in ingest_jobs so it is resumable.
+              </p>
+            </>
+          )}
         </Card>
       </div>
 
@@ -179,6 +201,12 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
               .
             </p>
           )}
+        </Card>
+      </div>
+
+      <div className="mt-4">
+        <Card title="Danger zone" subtitle="Deleting a client is permanent and removes all of its data from the database.">
+          <DeleteClientControl clientId={client.id} clientName={client.name} />
         </Card>
       </div>
     </>

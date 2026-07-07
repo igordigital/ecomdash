@@ -10,6 +10,8 @@ export interface DimClientTable {
   slug: string;
   timezone: string;
   currency: string;
+  status: Generated<"active" | "archived">;
+  archived_at: Timestamp | null;
   created_at: Generated<Timestamp>;
 }
 

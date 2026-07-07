@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { AdminPageHeader, BackfillBadge, ConnectionStatusBadge } from "@/components/admin/ui";
+import { AdminPageHeader, BackfillBadge, ClientStatusBadge, ConnectionStatusBadge } from "@/components/admin/ui";
+import { ArchiveClientToggle } from "@/components/admin/row-actions";
 import { Card } from "@/components/ui";
 import { getClientBackfillSummary, getClients } from "@/lib/admin-store";
 
@@ -24,22 +25,27 @@ export default async function ClientsPage() {
             <thead>
               <tr className="border-b border-slate-800 text-left text-xs uppercase tracking-wide text-slate-500">
                 <th className="pb-2 pr-4 font-medium">Client</th>
+                <th className="pb-2 pr-4 font-medium">Status</th>
                 <th className="pb-2 pr-4 font-medium">Timezone</th>
                 <th className="pb-2 pr-4 font-medium">Google</th>
                 <th className="pb-2 pr-4 font-medium">Meta</th>
                 <th className="pb-2 pr-4 font-medium">GA4</th>
                 <th className="pb-2 pr-4 font-medium">Store</th>
-                <th className="pb-2 font-medium">Backfill</th>
+                <th className="pb-2 pr-4 font-medium">Backfill</th>
+                <th className="pb-2 font-medium" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
               {clients.map((c) => (
-                <tr key={c.id} className="text-slate-300">
+                <tr key={c.id} className={`text-slate-300 ${c.status === "archived" ? "opacity-60" : ""}`}>
                   <td className="py-2.5 pr-4">
                     <Link href={`/admin/clients/${c.id}`} className="font-medium text-slate-200 hover:underline">
                       {c.name}
                     </Link>
                     <p className="text-xs text-slate-500">{c.slug}</p>
+                  </td>
+                  <td className="py-2.5 pr-4">
+                    <ClientStatusBadge status={c.status} />
                   </td>
                   <td className="py-2.5 pr-4 text-xs text-slate-400">{c.timezone}</td>
                   <td className="py-2.5 pr-4">
@@ -54,8 +60,11 @@ export default async function ClientsPage() {
                   <td className="py-2.5 pr-4">
                     <ConnectionStatusBadge status={c.store?.status ?? "not_connected"} />
                   </td>
-                  <td className="py-2.5">
+                  <td className="py-2.5 pr-4">
                     <BackfillBadge status={getClientBackfillSummary(c)} />
+                  </td>
+                  <td className="py-2.5 text-right">
+                    <ArchiveClientToggle clientId={c.id} status={c.status} />
                   </td>
                 </tr>
               ))}

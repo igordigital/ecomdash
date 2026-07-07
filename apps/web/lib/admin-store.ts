@@ -126,6 +126,8 @@ export interface StoreConnection {
   status: ConnectionStatus;
 }
 
+export type ClientLifecycleStatus = "active" | "archived";
+
 export interface AdminClient {
   id: string;
   name: string;
@@ -133,6 +135,8 @@ export interface AdminClient {
   timezone: string;
   currency: string;
   createdAt: string;
+  status: ClientLifecycleStatus;
+  archivedAt: string | null;
   google: { customerId: string; name: string; status: ConnectionStatus } | null;
   meta: { accountId: string; name: string; status: ConnectionStatus } | null;
   ga4: { propertyId: string; name: string; status: ConnectionStatus } | null;
@@ -266,6 +270,8 @@ async function loadClients(clientIds?: string[]): Promise<AdminClient[]> {
       timezone: c.timezone,
       currency: c.currency,
       createdAt: String(c.created_at).slice(0, 10),
+      status: c.status,
+      archivedAt: c.archived_at ? String(c.archived_at).slice(0, 10) : null,
       google: googleCred && googleConfig ? { customerId: googleConfig.external_id, name: googleConfig.name, status: connStatus(googleCred.status) } : null,
       meta: metaCred && metaConfig ? { accountId: metaConfig.external_id, name: metaConfig.name, status: connStatus(metaCred.status) } : null,
       ga4: ga4Cred && ga4Config ? { propertyId: ga4Config.external_id, name: ga4Config.name, status: connStatus(ga4Cred.status) } : null,
@@ -379,6 +385,33 @@ export async function createClientRecord(input: NewClientInput): Promise<AdminCl
   return record;
 }
 
+/** Archived clients keep all their historical data but are skipped by the daily/backfill sync. Reversible. */
+export async function archiveClient(clientId: string): Promise<void> {
+  await getDb()
+    .updateTable("dim_client")
+    .set({ status: "archived", archived_at: new Date() })
+    .where("client_id", "=", clientId)
+    .execute();
+}
+
+export async function unarchiveClient(clientId: string): Promise<void> {
+  await getDb()
+    .updateTable("dim_client")
+    .set({ status: "active", archived_at: null })
+    .where("client_id", "=", clientId)
+    .execute();
+}
+
+/**
+ * Permanently purges a client and every row keyed to it (credentials,
+ * ingest jobs, campaign map, all fact/mart tables, product data, and any
+ * client-role app_users tied to it) via ON DELETE CASCADE from dim_client.
+ * Irreversible: there is no soft-delete path back from this, unlike archive.
+ */
+export async function deleteClient(clientId: string): Promise<void> {
+  await getDb().deleteFrom("dim_client").where("client_id", "=", clientId).execute();
+}
+
 /**
  * Queues a backfill for an explicit date range, one or more sources at a
  * time: one ingest_jobs row per day per source (matches jobs/src/backfill.ts,
@@ -393,7 +426,7 @@ export async function startBackfill(
 ): Promise<{ queued: BackfillSourceKey[]; blocked: BackfillSourceKey[] }> {
   const db = getDb();
   const client = await getClient(clientId);
-  if (!client) return { queued: [], blocked: sources };
+  if (!client || client.status === "archived") return { queued: [], blocked: sources };
 
   const queued: BackfillSourceKey[] = [];
   const blocked: BackfillSourceKey[] = [];

@@ -2,10 +2,10 @@ import { cookies } from "next/headers";
 import { SESSION_COOKIE, verifySession } from "./auth";
 import { getClients } from "./admin-store";
 
-/** Fallback when nothing else applies (no session, or staff not previewing anyone): the earliest-created client. */
+/** Fallback when nothing else applies (no session, or staff not previewing anyone): the earliest-created active client. */
 async function getDefaultClientId(): Promise<string> {
   const clients = await getClients();
-  return clients[0]?.id ?? "";
+  return (clients.find((c) => c.status === "active") ?? clients[0])?.id ?? "";
 }
 
 /**

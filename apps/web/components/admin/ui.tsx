@@ -1,11 +1,16 @@
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui";
-import type { BackfillStatus, ConnectionStatus } from "@/lib/admin-store";
+import type { BackfillStatus, ClientLifecycleStatus, ConnectionStatus } from "@/lib/admin-store";
 
 export function ConnectionStatusBadge({ status }: { status: ConnectionStatus }) {
   if (status === "connected") return <Badge tone="good">Connected</Badge>;
   if (status === "needs_reauth") return <Badge tone="bad">Needs reauth</Badge>;
   return <Badge tone="neutral">Not connected</Badge>;
+}
+
+export function ClientStatusBadge({ status }: { status: ClientLifecycleStatus }) {
+  if (status === "archived") return <Badge tone="warn">Archived</Badge>;
+  return <Badge tone="good">Active</Badge>;
 }
 
 const BACKFILL_META: Record<BackfillStatus, { label: string; tone: "neutral" | "info" | "warn" | "good" }> = {
@@ -25,7 +30,7 @@ export function AdminPageHeader({
   description,
   right,
 }: {
-  title: string;
+  title: ReactNode;
   description: string;
   right?: ReactNode;
 }) {

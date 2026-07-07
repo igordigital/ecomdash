@@ -15,6 +15,7 @@ import {
   YAxis,
 } from "recharts";
 import type { MerPoint, TrafficDay } from "../lib/dashboard-data";
+import { getCurrencySymbol } from "../lib/format";
 
 const AXIS = { stroke: "#334155", fontSize: 11 } as const;
 const GRID = { stroke: "#1e293b", strokeDasharray: "3 3" } as const;
@@ -26,31 +27,37 @@ const TOOLTIP_STYLE = {
 } as const;
 
 const shortDate = (d: string) => d.slice(5);
-const usd = (v: number) => `$${Math.round(v).toLocaleString("en-US")}`;
+const numAxisFmt = (v: number) => (Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`);
 
 type ValueFmt = "usd" | "pct" | "num" | "ratio";
 
-const FMT: Record<ValueFmt, (v: number) => string> = {
-  usd: (v) => usd(v),
-  pct: (v) => `${(v * 100).toFixed(2)}%`,
-  num: (v) => v.toLocaleString("en-US"),
-  ratio: (v) => v.toFixed(2),
-};
+function buildFmt(currencySymbol: string): Record<ValueFmt, (v: number) => string> {
+  return {
+    usd: (v) => `${currencySymbol}${Math.round(v).toLocaleString("en-US")}`,
+    pct: (v) => `${(v * 100).toFixed(2)}%`,
+    num: (v) => v.toLocaleString("en-US"),
+    ratio: (v) => v.toFixed(2),
+  };
+}
 
-const AXIS_FMT: Record<ValueFmt, (v: number) => string> = {
-  usd: (v) => (Math.abs(v) >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v.toFixed(0)}`),
-  pct: (v) => `${(v * 100).toFixed(1)}%`,
-  num: (v) => (Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`),
-  ratio: (v) => v.toFixed(1),
-};
+function buildAxisFmt(currencySymbol: string): Record<ValueFmt, (v: number) => string> {
+  return {
+    usd: (v) => (Math.abs(v) >= 1000 ? `${currencySymbol}${(v / 1000).toFixed(0)}k` : `${currencySymbol}${v.toFixed(0)}`),
+    pct: (v) => `${(v * 100).toFixed(1)}%`,
+    num: (v) => (Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`),
+    ratio: (v) => v.toFixed(1),
+  };
+}
 
-export function SpendRevenueChart({ data }: { data: MerPoint[] }) {
+export function SpendRevenueChart({ data, currency = "USD" }: { data: MerPoint[]; currency?: string }) {
+  const symbol = getCurrencySymbol(currency);
+  const usd = buildFmt(symbol).usd;
   return (
     <ResponsiveContainer width="100%" height={280}>
       <ComposedChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
         <CartesianGrid {...GRID} />
         <XAxis dataKey="date" tickFormatter={shortDate} {...AXIS} tickLine={false} minTickGap={40} />
-        <YAxis {...AXIS} tickLine={false} tickFormatter={AXIS_FMT.usd} />
+        <YAxis {...AXIS} tickLine={false} tickFormatter={buildAxisFmt(symbol).usd} />
         <Tooltip
           contentStyle={TOOLTIP_STYLE}
           labelStyle={{ color: "#94a3b8" }}
@@ -85,6 +92,7 @@ export function MetricTrend({
   height = 220,
   target,
   targetLabel,
+  currency = "USD",
 }: {
   data: object[];
   series: TrendSeries[];
@@ -92,7 +100,11 @@ export function MetricTrend({
   height?: number;
   target?: number;
   targetLabel?: string;
+  currency?: string;
 }) {
+  const symbol = getCurrencySymbol(currency);
+  const FMT = buildFmt(symbol);
+  const AXIS_FMT = buildAxisFmt(symbol);
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
@@ -148,7 +160,7 @@ export function TrafficChart({ data, channels }: { data: TrafficDay[]; channels:
       <AreaChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
         <CartesianGrid {...GRID} />
         <XAxis dataKey="date" tickFormatter={shortDate} {...AXIS} tickLine={false} minTickGap={40} />
-        <YAxis {...AXIS} tickLine={false} tickFormatter={AXIS_FMT.num} />
+        <YAxis {...AXIS} tickLine={false} tickFormatter={numAxisFmt} />
         <Tooltip
           contentStyle={TOOLTIP_STYLE}
           labelStyle={{ color: "#94a3b8" }}

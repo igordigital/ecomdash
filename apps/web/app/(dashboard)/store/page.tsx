@@ -57,7 +57,7 @@ export default async function StorePage({ searchParams }: { searchParams: Promis
       <SectionTitle>Trends</SectionTitle>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Net revenue, daily">
-          <MetricTrend data={daily} series={[{ key: "revenue", name: "Net revenue", color: "#f59e0b" }]} fmt="usd" />
+          <MetricTrend data={daily} series={[{ key: "revenue", name: "Net revenue", color: "#f59e0b" }]} fmt="usd" currency={currency} />
         </Card>
         <Card title="Orders and AOV, daily">
           <MetricTrend

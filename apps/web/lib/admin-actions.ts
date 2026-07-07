@@ -21,6 +21,7 @@ import {
   type Role,
 } from "./admin-store";
 import { runPendingGa4Jobs } from "./ga4-ingest";
+import { runPendingMetaJobs } from "./meta-ingest";
 
 const SOURCE_LABELS: Record<BackfillSourceKey, string> = {
   google: "Google",
@@ -183,6 +184,14 @@ export async function connectClientAccountAction(clientId: string, platform: Con
 export async function runGa4NowAction(clientId: string): Promise<{ ok: true }> {
   void runPendingGa4Jobs(clientId).catch((err) => {
     console.error("GA4 job run failed for client", clientId, err);
+  });
+  return { ok: true };
+}
+
+/** Same fire-and-forget shape as runGa4NowAction. */
+export async function runMetaNowAction(clientId: string): Promise<{ ok: true }> {
+  void runPendingMetaJobs(clientId).catch((err) => {
+    console.error("Meta job run failed for client", clientId, err);
   });
   return { ok: true };
 }

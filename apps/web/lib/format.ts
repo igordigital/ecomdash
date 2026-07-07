@@ -23,10 +23,19 @@ export const fmtUsdCompact = (n: number) => usdCompact.format(n);
 export function makeCurrencyFormatters(currency: string) {
   const full = new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 });
   const compact = new Intl.NumberFormat("en-US", { style: "currency", currency, notation: "compact", maximumFractionDigits: 1 });
+  // Small per-unit costs (CPC, CPM) round to 0 under fmtUsd's whole-number precision; this keeps cents.
+  const precise = new Intl.NumberFormat("en-US", { style: "currency", currency, minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return {
     fmtUsd: (n: number) => full.format(n),
     fmtUsdCompact: (n: number) => compact.format(n),
+    fmtUsdPrecise: (n: number) => precise.format(n),
   };
+}
+
+/** Just the symbol ($, ₪, €...) for a currency code, e.g. for chart axis labels that build their own compact notation. */
+export function getCurrencySymbol(currency: string): string {
+  const parts = new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).formatToParts(0);
+  return parts.find((p) => p.type === "currency")?.value ?? currency;
 }
 
 export const fmtNum = (n: number) => num.format(n);

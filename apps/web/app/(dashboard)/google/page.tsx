@@ -19,7 +19,7 @@ export default async function GooglePage({ searchParams }: { searchParams: Promi
     getGoogleCampaigns(clientId, range),
     getClientCurrency(clientId),
   ]);
-  const { fmtUsd, fmtUsdCompact } = makeCurrencyFormatters(currency);
+  const { fmtUsd, fmtUsdCompact, fmtUsdPrecise } = makeCurrencyFormatters(currency);
   const { cur, prev, trend, sparkSpend, sparkRoas } = networkKpis;
 
   return (
@@ -38,7 +38,7 @@ export default async function GooglePage({ searchParams }: { searchParams: Promi
       <SectionTitle hint={`${range.label}, ${range.compareLabel}.`}>Network KPIs</SectionTitle>
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatCard label="Spend" value={fmtUsdCompact(cur.spend)} current={cur.spend} previous={prev.spend} spark={sparkSpend} sparkColor="#34d399" />
-        <StatCard label="CPC" value={`$${cur.cpc.toFixed(2)}`} current={cur.cpc} previous={prev.cpc} invert />
+        <StatCard label="CPC" value={fmtUsdPrecise(cur.cpc)} current={cur.cpc} previous={prev.cpc} invert />
         <StatCard label="CTR" value={fmtPct(cur.ctr)} current={cur.ctr} previous={prev.ctr} />
         <StatCard label="Clicks" value={fmtNumCompact(cur.clicks)} current={cur.clicks} previous={prev.clicks} />
         <StatCard label="Conversions (diag)" value={fmtNum(cur.purchases)} current={cur.purchases} previous={prev.purchases} />
@@ -56,10 +56,10 @@ export default async function GooglePage({ searchParams }: { searchParams: Promi
       <SectionTitle>Trends</SectionTitle>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Daily spend">
-          <MetricTrend data={trend} series={[{ key: "spend", name: "Spend", color: "#34d399" }]} fmt="usd" />
+          <MetricTrend data={trend} series={[{ key: "spend", name: "Spend", color: "#34d399" }]} fmt="usd" currency={currency} />
         </Card>
         <Card title="CPC">
-          <MetricTrend data={trend} series={[{ key: "cpc", name: "CPC", color: "#f59e0b" }]} fmt="usd" />
+          <MetricTrend data={trend} series={[{ key: "cpc", name: "CPC", color: "#f59e0b" }]} fmt="usd" currency={currency} />
         </Card>
       </div>
 

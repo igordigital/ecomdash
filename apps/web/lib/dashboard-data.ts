@@ -650,6 +650,7 @@ export type Health = "scaling" | "healthy" | "watch" | "fatigued" | "inefficient
 
 export interface CampaignHealth {
   platform: "meta" | "google";
+  campaignId: string;
   name: string;
   spend: number;
   impressions: number;
@@ -745,6 +746,7 @@ export async function getCampaignHealth(clientId: string, range: ResolvedRange):
     const ga4Row = c.utmCampaign ? ga4.get(c.utmCampaign) : undefined;
     return {
       platform: c.platform,
+      campaignId: c.campaignId,
       name: c.name,
       spend: c.spend,
       impressions: c.impressions,

@@ -49,7 +49,7 @@ export default async function MetaPage({ searchParams }: { searchParams: Promise
     getUtmMatchRate(clientId, range),
     getClientCurrency(clientId),
   ]);
-  const { fmtUsd, fmtUsdCompact } = makeCurrencyFormatters(currency);
+  const { fmtUsd, fmtUsdCompact, fmtUsdPrecise } = makeCurrencyFormatters(currency);
   const { cur, prev, trend, sparkSpend, sparkCtr, sparkCpm, sparkRoas } = networkKpis;
   const campaigns = allCampaigns.filter((c) => c.platform === "meta");
 
@@ -70,7 +70,7 @@ export default async function MetaPage({ searchParams }: { searchParams: Promise
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatCard label="Spend" value={fmtUsdCompact(cur.spend)} current={cur.spend} previous={prev.spend} spark={sparkSpend} />
         <StatCard label="CPM" value={fmtUsd(cur.cpm)} current={cur.cpm} previous={prev.cpm} invert spark={sparkCpm} sparkColor="#f59e0b" />
-        <StatCard label="CPC" value={`$${cur.cpc.toFixed(2)}`} current={cur.cpc} previous={prev.cpc} invert />
+        <StatCard label="CPC" value={fmtUsdPrecise(cur.cpc)} current={cur.cpc} previous={prev.cpc} invert />
         <StatCard label="CTR" value={fmtPct(cur.ctr)} current={cur.ctr} previous={prev.ctr} spark={sparkCtr} sparkColor="#34d399" />
         <StatCard label="Reach" value={fmtNumCompact(cur.reach)} current={cur.reach} previous={prev.reach} />
         <StatCard
@@ -98,7 +98,7 @@ export default async function MetaPage({ searchParams }: { searchParams: Promise
       <SectionTitle>Cost and engagement trends</SectionTitle>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Daily spend">
-          <MetricTrend data={trend} series={[{ key: "spend", name: "Spend", color: "#38bdf8" }]} fmt="usd" />
+          <MetricTrend data={trend} series={[{ key: "spend", name: "Spend", color: "#38bdf8" }]} fmt="usd" currency={currency} />
         </Card>
         <Card title="CTR" subtitle="Softening CTR during the scale-up is expected; watch it against frequency.">
           <MetricTrend data={trend} series={[{ key: "ctr", name: "CTR", color: "#34d399" }]} fmt="pct" />
@@ -111,6 +111,7 @@ export default async function MetaPage({ searchParams }: { searchParams: Promise
               { key: "cpc", name: "CPC", color: "#f472b6" },
             ]}
             fmt="usd"
+            currency={currency}
           />
         </Card>
         <Card title="Frequency and ROAS (diag)">
@@ -187,7 +188,7 @@ export default async function MetaPage({ searchParams }: { searchParams: Promise
             </thead>
             <tbody className="divide-y divide-slate-800/60">
               {campaigns.map((c) => (
-                <tr key={c.name} className="text-slate-300">
+                <tr key={c.campaignId} className="text-slate-300">
                   <td className="py-2.5 pr-4 font-medium text-slate-200">{c.name}</td>
                   <td className="py-2.5 pr-4">
                     <HealthChip health={c.health} />
@@ -231,7 +232,7 @@ export default async function MetaPage({ searchParams }: { searchParams: Promise
                 const roas = ad.spend > 0 ? ad.convValue / ad.spend : 0;
                 const fatigued = ad.frequency >= 6;
                 return (
-                  <tr key={`${ad.campaign}-${ad.name}`} className="text-slate-300">
+                  <tr key={`${ad.campaign}-${ad.adset}-${ad.name}-${ad.type}`} className="text-slate-300">
                     <td className="max-w-60 py-2.5 pr-4">
                       <p className="truncate font-medium text-slate-200">{ad.name}</p>
                       <p className="truncate text-xs text-slate-500">

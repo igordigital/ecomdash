@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminPageHeader, BackfillBadge, ClientStatusBadge, ConnectionStatusBadge } from "@/components/admin/ui";
-import { ArchiveClientToggle, ConnectAccountControl, DeleteClientControl, RunGa4NowButton } from "@/components/admin/row-actions";
+import { ArchiveClientToggle, ConnectAccountControl, DeleteClientControl, RunSourceNowButton } from "@/components/admin/row-actions";
 import { BackfillForm, type BackfillSourceRow } from "@/components/admin/backfill-form";
 import { Card } from "@/components/ui";
 import { getClient, getClientBackfillSummary, getGa4Properties, getGoogleAccounts, getMetaAccounts, getUsers } from "@/lib/admin-store";
@@ -166,13 +166,16 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 minDate={addDays(latestDate, -730)}
                 maxDate={latestDate}
               />
-              <div className="mt-3 flex items-center justify-between">
+              <div className="mt-3 flex items-center justify-between gap-4">
                 <p className="text-xs text-slate-500">
                   Queuing writes day-grain rows to ingest_jobs, tracked per (client, source, date) so it&apos;s
-                  resumable. Only GA4 has a real processor right now (see below); Google Ads, Meta, and store queue
-                  but won&apos;t move until those connectors are built.
+                  resumable. GA4 and Meta have real processors (buttons on the right); Google Ads and store queue but
+                  won&apos;t move until those connectors are built.
                 </p>
-                <RunGa4NowButton clientId={client.id} disabled={!client.ga4} />
+                <div className="flex shrink-0 flex-col items-end gap-2">
+                  <RunSourceNowButton clientId={client.id} source="ga4" label="Run GA4 now" disabled={!client.ga4} />
+                  <RunSourceNowButton clientId={client.id} source="meta" label="Run Meta now" disabled={!client.meta} />
+                </div>
               </div>
             </>
           )}

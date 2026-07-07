@@ -49,7 +49,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
             </thead>
             <tbody className="divide-y divide-slate-800/60">
               {campaigns.map((c) => (
-                <tr key={`${c.platform}-${c.name}`} className="text-slate-300">
+                <tr key={`${c.platform}-${c.campaignId}`} className="text-slate-300">
                   <td className="py-2.5 pr-4 font-medium text-slate-200">{c.name}</td>
                   <td className="py-2.5 pr-4">
                     <PlatformDot platform={c.platform} />

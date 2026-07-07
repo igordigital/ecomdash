@@ -126,7 +126,7 @@ export default async function OverviewPage({
           title="Daily spend vs store net revenue"
           subtitle="Spend from Meta and Google. Revenue only from the store, never from platform conversions."
         >
-          <SpendRevenueChart data={series} />
+          <SpendRevenueChart data={series} currency={currency} />
         </Card>
         <Card title={`Rolling MER (${range.label.toLowerCase()} window) vs target`} subtitle="Restated as platforms revise attribution.">
           <MetricTrend

@@ -9,6 +9,7 @@ import {
   deleteClientAction,
   removeUserAction,
   runGa4NowAction,
+  runMetaNowAction,
   unarchiveClientAction,
 } from "@/lib/admin-actions";
 import { ConnectionStatusBadge } from "@/components/admin/ui";
@@ -247,13 +248,28 @@ export function ConnectAccountControl({
   );
 }
 
+const RUN_NOW_ACTIONS = {
+  ga4: runGa4NowAction,
+  meta: runMetaNowAction,
+} as const;
+
 /**
- * Processes pending GA4 ingest_jobs for this client right now, in place of
- * a real always-on worker (see lib/ga4-ingest.ts). Fire-and-forget on the
- * server side, so this button returns immediately; there's no live
- * progress feed yet, so it just tells you to check back.
+ * Processes pending ingest_jobs for this client + source right now, in
+ * place of a real always-on worker (see lib/ga4-ingest.ts / lib/meta-ingest.ts).
+ * Fire-and-forget on the server side, so this button returns immediately;
+ * there's no live progress feed yet, so it just tells you to check back.
  */
-export function RunGa4NowButton({ clientId, disabled }: { clientId: string; disabled?: boolean }) {
+export function RunSourceNowButton({
+  clientId,
+  source,
+  label,
+  disabled,
+}: {
+  clientId: string;
+  source: keyof typeof RUN_NOW_ACTIONS;
+  label: string;
+  disabled?: boolean;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [started, setStarted] = useState(false);
@@ -265,14 +281,14 @@ export function RunGa4NowButton({ clientId, disabled }: { clientId: string; disa
         disabled={disabled || pending}
         onClick={() =>
           startTransition(async () => {
-            await runGa4NowAction(clientId);
+            await RUN_NOW_ACTIONS[source](clientId);
             setStarted(true);
             router.refresh();
           })
         }
         className="rounded border border-slate-700 px-2.5 py-1 text-xs font-medium text-slate-300 hover:border-slate-600 disabled:opacity-50"
       >
-        Run GA4 now
+        {label}
       </button>
       {started ? <span className="text-xs text-slate-500">Started — reload in a bit to see progress.</span> : null}
     </div>

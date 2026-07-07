@@ -10,10 +10,18 @@ const GA4_ERROR_LABELS: Record<string, string> = {
   exchange_failed: "Something went wrong talking to Google. Check the server logs.",
 };
 
+const META_ERROR_LABELS: Record<string, string> = {
+  access_denied: "Meta sign-in was cancelled.",
+  invalid_state: "That link expired. Try connecting again.",
+  exchange_failed: "Something went wrong talking to Meta. Check the server logs.",
+};
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
 export default async function IntegrationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ga4?: string; ga4_message?: string }>;
+  searchParams: Promise<{ ga4?: string; ga4_message?: string; meta?: string; meta_message?: string }>;
 }) {
   const sp = await searchParams;
   const [integrations, googleAccounts, metaAccounts, ga4Properties] = await Promise.all([
@@ -23,6 +31,8 @@ export default async function IntegrationsPage({
     getGa4Properties(),
   ]);
   const { google, meta, ga4 } = integrations;
+  const metaDaysLeft = meta.expiresAt ? Math.ceil((new Date(meta.expiresAt).getTime() - Date.now()) / MS_PER_DAY) : null;
+  const metaExpiringSoon = metaDaysLeft !== null && metaDaysLeft <= 14;
 
   return (
     <>
@@ -38,6 +48,23 @@ export default async function IntegrationsPage({
       ) : sp.ga4 === "error" ? (
         <div className="mb-4 rounded border border-red-900/60 bg-red-950/20 p-3 text-xs text-red-300">
           Couldn&apos;t connect Google Analytics: {GA4_ERROR_LABELS[sp.ga4_message ?? ""] ?? sp.ga4_message ?? "unknown error"}
+        </div>
+      ) : null}
+
+      {sp.meta === "connected" ? (
+        <div className="mb-4 rounded border border-emerald-900/60 bg-emerald-950/20 p-3 text-xs text-emerald-300">
+          Meta connected. Ad accounts below are refreshed from that account.
+        </div>
+      ) : sp.meta === "error" ? (
+        <div className="mb-4 rounded border border-red-900/60 bg-red-950/20 p-3 text-xs text-red-300">
+          Couldn&apos;t connect Meta: {META_ERROR_LABELS[sp.meta_message ?? ""] ?? sp.meta_message ?? "unknown error"}
+        </div>
+      ) : null}
+
+      {metaExpiringSoon ? (
+        <div className="mb-4 rounded border border-amber-900/60 bg-amber-950/20 p-3 text-xs text-amber-300">
+          Meta&apos;s connection expires in {metaDaysLeft} day{metaDaysLeft === 1 ? "" : "s"} — Meta tokens don&apos;t
+          renew silently. Reconnect below before it lapses.
         </div>
       ) : null}
 
@@ -92,25 +119,32 @@ export default async function IntegrationsPage({
           </div>
           <dl className="mt-3 grid gap-1.5 text-xs text-slate-400">
             <div className="flex justify-between">
-              <dt>Business Manager</dt>
-              <dd className="text-slate-300">{meta.businessManagerName}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt>BM ID</dt>
-              <dd className="tabular-nums text-slate-300">{meta.businessManagerId}</dd>
+              <dt>Connected as</dt>
+              <dd className="max-w-[160px] truncate text-slate-300" title={meta.connectedName}>
+                {meta.connectedName || "—"}
+              </dd>
             </div>
             <div className="flex justify-between">
               <dt>Connected</dt>
               <dd className="text-slate-300">{meta.connectedAt}</dd>
             </div>
+            <div className="flex justify-between">
+              <dt>Expires</dt>
+              <dd className={metaExpiringSoon ? "text-amber-400" : "text-slate-300"}>
+                {meta.expiresAt ? new Date(meta.expiresAt).toISOString().slice(0, 10) : "—"}
+              </dd>
+            </div>
           </dl>
           <p className="mt-3 text-[11px] text-slate-600">
-            Long-lived system user token, server-to-server, scoped to ads_read. Client ad accounts must be shared to
-            this Business Manager before they appear below.
+            OAuth sign-in through a dedicated Meta app, scoped to ads_read. Expires roughly every 60 days with no
+            silent renewal; reconnect manually before it lapses.
           </p>
-          <button className="mt-3 w-full rounded border border-slate-700 py-1.5 text-xs font-medium text-slate-300 hover:border-slate-600">
-            Reauthorize
-          </button>
+          <Link
+            href="/api/admin/integrations/meta/authorize"
+            className="mt-3 block w-full rounded border border-slate-700 py-1.5 text-center text-xs font-medium text-slate-300 hover:border-slate-600"
+          >
+            {meta.connected ? "Reconnect" : "Connect Meta"}
+          </Link>
           <div className="mt-4 border-t border-slate-800 pt-3">
             <p className="mb-1.5 text-xs font-medium text-slate-500">Visible ad accounts ({metaAccounts.length})</p>
             <ul className="grid gap-1 text-xs text-slate-400">

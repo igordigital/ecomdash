@@ -41,9 +41,10 @@ export interface GoogleIntegration {
 }
 export interface MetaIntegration {
   connected: boolean;
-  businessManagerId: string;
-  businessManagerName: string;
+  connectedName: string;
   connectedAt: string | null;
+  /** Meta user access tokens expire (~60 days), unlike GA4's refresh token; the Integrations page warns as this approaches. */
+  expiresAt: string | null;
 }
 export interface Ga4Integration {
   connected: boolean;
@@ -69,7 +70,7 @@ export async function getAgencyIntegrations(): Promise<AgencyIntegrations> {
   const m = byPlatform.get("meta");
   const a = byPlatform.get("ga4");
   const googleRef = (g?.external_ref as { mccId?: string; developerTokenStatus?: "approved" | "pending" }) ?? {};
-  const metaRef = (m?.external_ref as { businessManagerId?: string; businessManagerName?: string }) ?? {};
+  const metaRef = (m?.external_ref as { connectedName?: string; expiresAt?: string }) ?? {};
   const ga4Ref = (a?.external_ref as { connectedEmail?: string }) ?? {};
   return {
     google: {
@@ -81,8 +82,8 @@ export async function getAgencyIntegrations(): Promise<AgencyIntegrations> {
     meta: {
       connected: m?.connected ?? false,
       connectedAt: m?.connected_at ? String(m.connected_at).slice(0, 10) : null,
-      businessManagerId: metaRef.businessManagerId ?? "",
-      businessManagerName: metaRef.businessManagerName ?? "",
+      connectedName: metaRef.connectedName ?? "",
+      expiresAt: metaRef.expiresAt ?? null,
     },
     ga4: {
       connected: a?.connected ?? false,
@@ -131,6 +132,50 @@ export async function replaceGa4Properties(properties: { propertyId: string; nam
   await db
     .insertInto("agency_ad_accounts")
     .values(properties.map((p) => ({ platform: "ga4" as const, external_id: p.propertyId, name: p.name, domain: p.domain, currency: null })))
+    .execute();
+}
+
+/**
+ * Persists the OAuth result for the agency-level Meta connection. The
+ * access token lives only in this row's external_ref and is read back only
+ * by getMetaAccessToken (used by the connector, never by a page). expiresAt
+ * lets the Integrations page warn before the ~60 day Meta token lapses,
+ * since there is no refresh grant to renew it silently.
+ */
+export async function saveMetaConnection(input: { connectedName: string; accessToken: string; expiresAt: string }): Promise<void> {
+  await getDb()
+    .insertInto("agency_integrations")
+    .values({
+      platform: "meta",
+      connected: true,
+      connected_at: new Date(),
+      external_ref: { connectedName: input.connectedName, accessToken: input.accessToken, expiresAt: input.expiresAt },
+    })
+    .onConflict((oc) =>
+      oc.column("platform").doUpdateSet({
+        connected: true,
+        connected_at: new Date(),
+        external_ref: { connectedName: input.connectedName, accessToken: input.accessToken, expiresAt: input.expiresAt },
+      }),
+    )
+    .execute();
+}
+
+/** Internal-only: the connector needs this to call the Marketing API. Never call from a page component. */
+export async function getMetaAccessToken(): Promise<string | null> {
+  const row = await getDb().selectFrom("agency_integrations").select("external_ref").where("platform", "=", "meta").executeTakeFirst();
+  const ref = row?.external_ref as { accessToken?: string } | undefined;
+  return ref?.accessToken ?? null;
+}
+
+/** Replaces the full Meta ad account list with whatever the newly-connected System User / account can currently see. */
+export async function replaceMetaAdAccounts(accounts: { accountId: string; name: string; currency: string }[]): Promise<void> {
+  const db = getDb();
+  await db.deleteFrom("agency_ad_accounts").where("platform", "=", "meta").execute();
+  if (accounts.length === 0) return;
+  await db
+    .insertInto("agency_ad_accounts")
+    .values(accounts.map((a) => ({ platform: "meta" as const, external_id: a.accountId, name: a.name, currency: a.currency, domain: null })))
     .execute();
 }
 

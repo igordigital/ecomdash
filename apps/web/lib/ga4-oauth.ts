@@ -15,22 +15,7 @@
 const GA4_SCOPE = "openid email https://www.googleapis.com/auth/analytics.readonly";
 const CALLBACK_PATH = "/api/admin/integrations/ga4/callback";
 
-/**
- * request.nextUrl.origin reflects the scheme the Next.js server itself saw,
- * which on Railway (and most non-Vercel hosts) is plain http: the platform's
- * edge proxy terminates TLS and forwards to the container over HTTP. Google
- * matches the OAuth redirect_uri byte-for-byte including scheme, so building
- * it from nextUrl.origin silently produces an http:// URI that never matches
- * the https:// one actually registered, failing with redirect_uri_mismatch.
- * Trust the proxy's X-Forwarded-Proto/Host instead, falling back to nextUrl
- * for local dev where there's no proxy in front of it.
- */
-export function resolveOrigin(request: { headers: Headers; nextUrl: URL }): string {
-  const forwardedProto = request.headers.get("x-forwarded-proto");
-  const forwardedHost = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
-  if (forwardedProto && forwardedHost) return `${forwardedProto.split(",")[0]}://${forwardedHost}`;
-  return request.nextUrl.origin;
-}
+export { resolveOrigin } from "./oauth-utils";
 
 function getClientCredentials(): { clientId: string; clientSecret: string } {
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;

@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth";
 import { canManageIntegrations } from "@/lib/admin-permissions";
-import { exchangeGa4Code, fetchGoogleEmail, listGa4Properties } from "@/lib/ga4-oauth";
+import { exchangeGa4Code, fetchGoogleEmail, listGa4Properties, resolveOrigin } from "@/lib/ga4-oauth";
 import { replaceGa4Properties, saveGa4Connection } from "@/lib/admin-store";
 
 const STATE_COOKIE = "ga4_oauth_state";
@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Admin only" }, { status: 403 });
   }
 
-  const { origin, searchParams } = request.nextUrl;
+  const origin = resolveOrigin(request);
+  const { searchParams } = request.nextUrl;
   const error = searchParams.get("error");
   if (error) return redirectWithStatus(origin, "error", error);
 

@@ -18,7 +18,10 @@ import type {
  *   dims [date, sessionSourceMedium, sessionCampaignName, deviceCategory]
  *   metrics [sessions, engagedSessions, engagementRate, conversions, totalRevenue]
  *
- * - Shared service account added as Viewer per property (per-client prereq).
+ * - Agency-level OAuth (apps/web/lib/ga4-oauth.ts), not a service account: one
+ *   Google account signs in once and lists whichever properties it already
+ *   has Viewer access to. authenticate() exchanges the stored refresh token
+ *   for a short-lived access token per run.
  * - One day per request during backfill: avoids the (other) row-cap bucket
  *   and sampling. Throttle against per-property quota tokens.
  * - Restatement: trailing 7 days (late hits + reprocessing).
@@ -27,7 +30,7 @@ import type {
 export interface Ga4Config {
   clientId: string;
   propertyId: string;
-  serviceAccountJson: string;
+  refreshToken: string;
 }
 
 export const ga4Connector: Connector<Ga4Config> = {
@@ -35,9 +38,11 @@ export const ga4Connector: Connector<Ga4Config> = {
   restatementDays: 7,
 
   async authenticate(cfg: Ga4Config): Promise<AuthContext> {
+    // TODO(phase-3): exchange cfg.refreshToken for an access token via the
+    // same token endpoint apps/web/lib/ga4-oauth.ts#refreshGa4AccessToken uses.
     return {
       clientId: cfg.clientId,
-      provider: { propertyId: cfg.propertyId, serviceAccountJson: cfg.serviceAccountJson },
+      provider: { propertyId: cfg.propertyId, refreshToken: cfg.refreshToken },
     };
   },
 

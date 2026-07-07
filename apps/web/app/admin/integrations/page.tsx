@@ -1,8 +1,21 @@
+import Link from "next/link";
 import { AdminPageHeader } from "@/components/admin/ui";
 import { Badge, Card } from "@/components/ui";
 import { getAgencyIntegrations, getGa4Properties, getGoogleAccounts, getMetaAccounts } from "@/lib/admin-store";
 
-export default async function IntegrationsPage() {
+const GA4_ERROR_LABELS: Record<string, string> = {
+  access_denied: "Google sign-in was cancelled.",
+  invalid_state: "That link expired. Try connecting again.",
+  no_refresh_token: "Google didn't return a long-lived token. Try again; consent should prompt fresh.",
+  exchange_failed: "Something went wrong talking to Google. Check the server logs.",
+};
+
+export default async function IntegrationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ga4?: string; ga4_message?: string }>;
+}) {
+  const sp = await searchParams;
   const [integrations, googleAccounts, metaAccounts, ga4Properties] = await Promise.all([
     getAgencyIntegrations(),
     getGoogleAccounts(),
@@ -17,6 +30,16 @@ export default async function IntegrationsPage() {
         title="Integrations"
         description="Authorize each platform once, at the agency level. New clients then pick from the accounts and properties already visible here, instead of going through OAuth per client."
       />
+
+      {sp.ga4 === "connected" ? (
+        <div className="mb-4 rounded border border-emerald-900/60 bg-emerald-950/20 p-3 text-xs text-emerald-300">
+          Google Analytics connected. Properties below are refreshed from that account.
+        </div>
+      ) : sp.ga4 === "error" ? (
+        <div className="mb-4 rounded border border-red-900/60 bg-red-950/20 p-3 text-xs text-red-300">
+          Couldn&apos;t connect Google Analytics: {GA4_ERROR_LABELS[sp.ga4_message ?? ""] ?? sp.ga4_message ?? "unknown error"}
+        </div>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card>
@@ -108,9 +131,9 @@ export default async function IntegrationsPage() {
           </div>
           <dl className="mt-3 grid gap-1.5 text-xs text-slate-400">
             <div className="flex justify-between">
-              <dt>Service account</dt>
-              <dd className="max-w-[160px] truncate text-slate-300" title={ga4.serviceAccountEmail}>
-                {ga4.serviceAccountEmail}
+              <dt>Connected as</dt>
+              <dd className="max-w-[160px] truncate text-slate-300" title={ga4.connectedEmail}>
+                {ga4.connectedEmail || "—"}
               </dd>
             </div>
             <div className="flex justify-between">
@@ -119,12 +142,15 @@ export default async function IntegrationsPage() {
             </div>
           </dl>
           <p className="mt-3 text-[11px] text-slate-600">
-            A single shared service account. Each client grants it Viewer access on their GA4 property; that grant is
-            a per-client prerequisite, done once outside this app.
+            OAuth sign-in, agency level. Lists whichever GA4 properties this Google account already has Viewer access
+            to; grant that access in each client&apos;s GA4 property first if a property is missing below.
           </p>
-          <button className="mt-3 w-full rounded border border-slate-700 py-1.5 text-xs font-medium text-slate-300 hover:border-slate-600">
-            Rotate credential
-          </button>
+          <Link
+            href="/api/admin/integrations/ga4/authorize"
+            className="mt-3 block w-full rounded border border-slate-700 py-1.5 text-center text-xs font-medium text-slate-300 hover:border-slate-600"
+          >
+            {ga4.connected ? "Reconnect" : "Connect Google Analytics"}
+          </Link>
           <div className="mt-4 border-t border-slate-800 pt-3">
             <p className="mb-1.5 text-xs font-medium text-slate-500">Visible properties ({ga4Properties.length})</p>
             <ul className="grid gap-1 text-xs text-slate-400">

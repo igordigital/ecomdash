@@ -47,7 +47,7 @@ export interface MetaIntegration {
 }
 export interface Ga4Integration {
   connected: boolean;
-  serviceAccountEmail: string;
+  connectedEmail: string;
   connectedAt: string | null;
 }
 export interface AgencyIntegrations {
@@ -56,30 +56,82 @@ export interface AgencyIntegrations {
   ga4: Ga4Integration;
 }
 
+/**
+ * GA4's external_ref also holds an OAuth refresh token (see saveGa4Connection
+ * below), which must never reach a page component. Every field returned here
+ * is explicitly picked, not spread, so an admin UI page can never accidentally
+ * render a secret just because it exists on the row.
+ */
 export async function getAgencyIntegrations(): Promise<AgencyIntegrations> {
   const rows = await getDb().selectFrom("agency_integrations").selectAll().execute();
   const byPlatform = new Map(rows.map((r) => [r.platform, r]));
   const g = byPlatform.get("google");
   const m = byPlatform.get("meta");
   const a = byPlatform.get("ga4");
-  const ref = <T>(row: typeof g, fallback: T): T => (row?.external_ref as T) ?? fallback;
+  const googleRef = (g?.external_ref as { mccId?: string; developerTokenStatus?: "approved" | "pending" }) ?? {};
+  const metaRef = (m?.external_ref as { businessManagerId?: string; businessManagerName?: string }) ?? {};
+  const ga4Ref = (a?.external_ref as { connectedEmail?: string }) ?? {};
   return {
     google: {
       connected: g?.connected ?? false,
       connectedAt: g?.connected_at ? String(g.connected_at).slice(0, 10) : null,
-      ...ref(g, { mccId: "", developerTokenStatus: "pending" as const }),
+      mccId: googleRef.mccId ?? "",
+      developerTokenStatus: googleRef.developerTokenStatus ?? "pending",
     },
     meta: {
       connected: m?.connected ?? false,
       connectedAt: m?.connected_at ? String(m.connected_at).slice(0, 10) : null,
-      ...ref(m, { businessManagerId: "", businessManagerName: "" }),
+      businessManagerId: metaRef.businessManagerId ?? "",
+      businessManagerName: metaRef.businessManagerName ?? "",
     },
     ga4: {
       connected: a?.connected ?? false,
       connectedAt: a?.connected_at ? String(a.connected_at).slice(0, 10) : null,
-      ...ref(a, { serviceAccountEmail: "" }),
+      connectedEmail: ga4Ref.connectedEmail ?? "",
     },
   };
+}
+
+/**
+ * Persists the OAuth result for the agency-level GA4 connection. The refresh
+ * token lives only in this row's external_ref and is read back only by
+ * getGa4RefreshToken (used by the connector, never by a page).
+ */
+export async function saveGa4Connection(input: { connectedEmail: string; refreshToken: string; scope: string }): Promise<void> {
+  await getDb()
+    .insertInto("agency_integrations")
+    .values({
+      platform: "ga4",
+      connected: true,
+      connected_at: new Date(),
+      external_ref: { connectedEmail: input.connectedEmail, refreshToken: input.refreshToken, scope: input.scope },
+    })
+    .onConflict((oc) =>
+      oc.column("platform").doUpdateSet({
+        connected: true,
+        connected_at: new Date(),
+        external_ref: { connectedEmail: input.connectedEmail, refreshToken: input.refreshToken, scope: input.scope },
+      }),
+    )
+    .execute();
+}
+
+/** Internal-only: the connector needs this to mint access tokens. Never call from a page component. */
+export async function getGa4RefreshToken(): Promise<string | null> {
+  const row = await getDb().selectFrom("agency_integrations").select("external_ref").where("platform", "=", "ga4").executeTakeFirst();
+  const ref = row?.external_ref as { refreshToken?: string } | undefined;
+  return ref?.refreshToken ?? null;
+}
+
+/** Replaces the full GA4 property list with whatever the newly-connected account can currently see. */
+export async function replaceGa4Properties(properties: { propertyId: string; name: string; domain: string }[]): Promise<void> {
+  const db = getDb();
+  await db.deleteFrom("agency_ad_accounts").where("platform", "=", "ga4").execute();
+  if (properties.length === 0) return;
+  await db
+    .insertInto("agency_ad_accounts")
+    .values(properties.map((p) => ({ platform: "ga4" as const, external_id: p.propertyId, name: p.name, domain: p.domain, currency: null })))
+    .execute();
 }
 
 export async function getGoogleAccounts(): Promise<GoogleAdsAccount[]> {

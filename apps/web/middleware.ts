@@ -32,7 +32,7 @@ export default async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (pathname.startsWith("/admin") && session.role === "client") {
+  if ((pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) && session.role === "client") {
     const url = req.nextUrl.clone();
     url.pathname = "/";
     url.search = "";

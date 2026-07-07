@@ -168,6 +168,7 @@ export interface FactGa4CampaignTable {
   engagement_rate: Numeric;
   ga4_conversions: Numeric;
   ga4_revenue: Numeric;
+  add_to_carts: Generated<string>;
   loaded_at: Generated<Timestamp>;
 }
 
@@ -182,6 +183,7 @@ export interface FactGa4ContentTable {
   engagement_rate: Numeric;
   ga4_conversions: Numeric;
   ga4_revenue: Numeric;
+  add_to_carts: Generated<string>;
   loaded_at: Generated<Timestamp>;
 }
 
@@ -197,6 +199,7 @@ export interface FactGa4TrafficTable {
   bounce_rate: Numeric;
   new_users: Generated<string>;
   total_users: Generated<string>;
+  add_to_carts: Generated<string>;
   loaded_at: Generated<Timestamp>;
 }
 

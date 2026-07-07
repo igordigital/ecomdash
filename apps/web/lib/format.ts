@@ -15,8 +15,20 @@ const numCompact = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 1,
 });
 
+/** Fallback USD formatters for contexts with no client (e.g. admin pages). Dashboard pages should use makeCurrencyFormatters(client.currency) instead. */
 export const fmtUsd = (n: number) => usd.format(n);
 export const fmtUsdCompact = (n: number) => usdCompact.format(n);
+
+/** Currency-aware formatters bound to a specific client's currency setting (dim_client.currency). */
+export function makeCurrencyFormatters(currency: string) {
+  const full = new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 });
+  const compact = new Intl.NumberFormat("en-US", { style: "currency", currency, notation: "compact", maximumFractionDigits: 1 });
+  return {
+    fmtUsd: (n: number) => full.format(n),
+    fmtUsdCompact: (n: number) => compact.format(n),
+  };
+}
+
 export const fmtNum = (n: number) => num.format(n);
 export const fmtNumCompact = (n: number) => numCompact.format(n);
 export const fmtPct = (n: number) => `${(n * 100).toFixed(1)}%`;

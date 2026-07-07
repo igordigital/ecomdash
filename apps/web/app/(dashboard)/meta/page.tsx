@@ -10,11 +10,12 @@ import {
   ShareBar,
   StatCard,
 } from "@/components/ui";
-import { fmtNum, fmtNumCompact, fmtPct, fmtRatio, fmtUsd, fmtUsdCompact } from "@/lib/format";
+import { fmtNum, fmtNumCompact, fmtPct, fmtRatio, makeCurrencyFormatters } from "@/lib/format";
 import { resolveRange, type RangeSearchParams } from "@/lib/range";
 import { resolveViewedClientId } from "@/lib/viewed-client";
 import {
   getCampaignHealth,
+  getClientCurrency,
   getCreativeBreakdown,
   getEarliestDate,
   getLatestDate,
@@ -39,14 +40,16 @@ export default async function MetaPage({ searchParams }: { searchParams: Promise
   const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
   const clientId = await resolveViewedClientId(sp.clientId);
 
-  const [networkKpis, funnel, creatives, allCampaigns, ads, matchRate] = await Promise.all([
+  const [networkKpis, funnel, creatives, allCampaigns, ads, matchRate, currency] = await Promise.all([
     getNetworkKpis(clientId, "meta", range),
     getNetworkFunnel(clientId, "meta", range),
     getCreativeBreakdown(clientId, range),
     getCampaignHealth(clientId, range),
     getMetaAds(clientId, range),
     getUtmMatchRate(clientId, range),
+    getClientCurrency(clientId),
   ]);
+  const { fmtUsd, fmtUsdCompact } = makeCurrencyFormatters(currency);
   const { cur, prev, trend, sparkSpend, sparkCtr, sparkCpm, sparkRoas } = networkKpis;
   const campaigns = allCampaigns.filter((c) => c.platform === "meta");
 

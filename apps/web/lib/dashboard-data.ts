@@ -45,6 +45,12 @@ export function getEarliestDate(): string {
   return addDays(getLatestDate(), -729);
 }
 
+/** dim_client.currency, for currency-aware formatting (see lib/format.ts#makeCurrencyFormatters). */
+export async function getClientCurrency(clientId: string): Promise<string> {
+  const row = await getDb().selectFrom("dim_client").select("currency").where("client_id", "=", clientId).executeTakeFirst();
+  return row?.currency ?? "USD";
+}
+
 // ---------------------------------------------------------------------------
 // Blended daily facts (spend + store revenue): the MER inputs
 // ---------------------------------------------------------------------------
@@ -922,35 +928,12 @@ export async function getGoogleCampaigns(clientId: string, range: ResolvedRange)
 }
 
 // ---------------------------------------------------------------------------
-// Site traffic health (fact_ga4_traffic; no crosswalk needed)
+// Site traffic health (fact_ga4_traffic; no crosswalk needed). Channels are
+// whatever GA4's default channel grouping actually reports for this client
+// (Paid Shopping, Cross-network, etc. included), not a fixed enum: ranked by
+// sessions and capped to the top 10 so the chart/table stay readable.
 // ---------------------------------------------------------------------------
-export const CHANNELS = ["Organic Search", "Paid Social", "Paid Search", "Direct", "Email", "Referral"] as const;
-
-export interface TrafficDay {
-  date: string;
-  [channel: string]: number | string;
-}
-
-export async function getTrafficSeries(clientId: string, range: ResolvedRange): Promise<TrafficDay[]> {
-  const { rows } = await sql<{ date: string; channel_group: string; sessions: string | null }>`
-    select date::text as date, channel_group, sum(sessions) as sessions
-    from fact_ga4_traffic
-    where client_id = ${clientId}::uuid and date between ${range.start}::date and ${range.end}::date
-    group by date, channel_group
-  `.execute(getDb());
-  const byDate = new Map<string, TrafficDay>();
-  const { start, end } = range;
-  let d = start;
-  while (d <= end) {
-    byDate.set(d, { date: d, ...Object.fromEntries(CHANNELS.map((c) => [c, 0])) });
-    d = addDays(d, 1);
-  }
-  for (const r of rows) {
-    const row = byDate.get(r.date);
-    if (row) row[r.channel_group] = Math.round(num(r.sessions));
-  }
-  return [...byDate.values()];
-}
+const TOP_CHANNEL_LIMIT = 10;
 
 export interface ChannelSummary {
   channel: string;
@@ -959,6 +942,7 @@ export interface ChannelSummary {
   avgSessionDuration: number;
   bounceRate: number;
   newUserShare: number;
+  addToCarts: number;
 }
 
 export async function getChannelSummaries(clientId: string, range: ResolvedRange): Promise<ChannelSummary[]> {
@@ -970,6 +954,7 @@ export async function getChannelSummaries(clientId: string, range: ResolvedRange
     bounce: string | null;
     new_users: string | null;
     total_users: string | null;
+    add_to_carts: string | null;
   }>`
     select
       channel_group,
@@ -978,24 +963,55 @@ export async function getChannelSummaries(clientId: string, range: ResolvedRange
       sum(avg_session_duration * sessions) as duration,
       sum(bounce_rate * sessions) as bounce,
       sum(new_users) as new_users,
-      sum(total_users) as total_users
+      sum(total_users) as total_users,
+      sum(add_to_carts) as add_to_carts
     from fact_ga4_traffic
     where client_id = ${clientId}::uuid and date between ${range.start}::date and ${range.end}::date
     group by channel_group
   `.execute(getDb());
-  const byChannel = new Map(rows.map((r) => [r.channel_group, r]));
-  return CHANNELS.map((channel) => {
-    const r = byChannel.get(channel);
-    const sessions = num(r?.sessions);
-    return {
-      channel,
-      sessions: Math.round(sessions),
-      engagementRate: sessions > 0 ? r4(num(r?.engaged) / sessions) : 0,
-      avgSessionDuration: sessions > 0 ? r2(num(r?.duration) / sessions) : 0,
-      bounceRate: sessions > 0 ? r4(num(r?.bounce) / sessions) : 0,
-      newUserShare: num(r?.total_users) > 0 ? r4(num(r?.new_users) / num(r?.total_users)) : 0,
-    };
-  }).sort((a, b) => b.sessions - a.sessions);
+  return rows
+    .map((r) => {
+      const sessions = num(r.sessions);
+      return {
+        channel: r.channel_group,
+        sessions: Math.round(sessions),
+        engagementRate: sessions > 0 ? r4(num(r.engaged) / sessions) : 0,
+        avgSessionDuration: sessions > 0 ? r2(num(r.duration) / sessions) : 0,
+        bounceRate: sessions > 0 ? r4(num(r.bounce) / sessions) : 0,
+        newUserShare: num(r.total_users) > 0 ? r4(num(r.new_users) / num(r.total_users)) : 0,
+        addToCarts: Math.round(num(r.add_to_carts)),
+      };
+    })
+    .sort((a, b) => b.sessions - a.sessions)
+    .slice(0, TOP_CHANNEL_LIMIT);
+}
+
+export interface TrafficDay {
+  date: string;
+  [channel: string]: number | string;
+}
+
+/** channels: the top-N list from getChannelSummaries, so the chart's series matches the table exactly. */
+export async function getTrafficSeries(clientId: string, range: ResolvedRange, channels: string[]): Promise<TrafficDay[]> {
+  const { rows } = await sql<{ date: string; channel_group: string; sessions: string | null }>`
+    select date::text as date, channel_group, sum(sessions) as sessions
+    from fact_ga4_traffic
+    where client_id = ${clientId}::uuid and date between ${range.start}::date and ${range.end}::date
+    group by date, channel_group
+  `.execute(getDb());
+  const byDate = new Map<string, TrafficDay>();
+  const { start, end } = range;
+  let d = start;
+  while (d <= end) {
+    byDate.set(d, { date: d, ...Object.fromEntries(channels.map((c) => [c, 0])) });
+    d = addDays(d, 1);
+  }
+  for (const r of rows) {
+    if (!channels.includes(r.channel_group)) continue;
+    const row = byDate.get(r.date);
+    if (row) row[r.channel_group] = Math.round(num(r.sessions));
+  }
+  return [...byDate.values()];
 }
 
 // ---------------------------------------------------------------------------
@@ -1004,89 +1020,108 @@ export async function getChannelSummaries(clientId: string, range: ResolvedRange
 // ---------------------------------------------------------------------------
 export interface CampaignTraffic {
   campaign: string;
-  platform: "meta" | "google" | null;
-  channelGroup: string;
-  sessions: number | null;
-  engagedSessions: number | null;
-  engagementRate: number | null;
+  sourceMedium: string;
+  sessions: number;
+  engagedSessions: number;
+  engagementRate: number;
+  addToCarts: number;
   transactions: number;
   revenue: number;
   aov: number;
-  utmMatched: boolean;
+  matchedPlatform: "meta" | "google" | null;
+  matchedCampaignName: string | null;
 }
 
+/**
+ * Every campaign GA4 has session data for, matched or not: previously this
+ * started from ad-spend campaigns (fact_ad_daily) and only ever showed a
+ * single catch-all "(not set)" row for everything else, hiding real
+ * utm_campaign traffic that isn't tied to a known Meta/Google ad campaign
+ * (email, affiliate, organic social with UTM tags, etc). Matching is now an
+ * explicit column instead of gating which rows appear at all.
+ */
 export async function getCampaignTraffic(clientId: string, range: ResolvedRange): Promise<CampaignTraffic[]> {
-  const [campaigns, ga4Rows] = await Promise.all([
-    fetchCampaignAgg(clientId, range.start, range.end),
+  const [ga4Rows, matchRows] = await Promise.all([
     sql<{
       session_campaign: string;
+      session_source_medium: string;
       sessions: string | null;
       engaged: string | null;
       conversions: string | null;
       revenue: string | null;
+      add_to_carts: string | null;
     }>`
-      select session_campaign, sum(sessions) as sessions, sum(engaged_sessions) as engaged,
-        sum(ga4_conversions) as conversions, sum(ga4_revenue) as revenue
+      select session_campaign, session_source_medium,
+        sum(sessions) as sessions, sum(engaged_sessions) as engaged,
+        sum(ga4_conversions) as conversions, sum(ga4_revenue) as revenue,
+        sum(add_to_carts) as add_to_carts
       from fact_ga4_campaign
       where client_id = ${clientId}::uuid and date between ${range.start}::date and ${range.end}::date
-      group by session_campaign
+      group by session_campaign, session_source_medium
+    `.execute(getDb()),
+    sql<{ utm_campaign: string; platform: "meta" | "google"; platform_campaign_name: string }>`
+      select distinct on (utm_campaign) utm_campaign, platform, platform_campaign_name
+      from dim_campaign_map
+      where client_id = ${clientId}::uuid and utm_campaign is not null
+      order by utm_campaign, updated_at desc
     `.execute(getDb()),
   ]);
-  const ga4 = new Map(ga4Rows.rows.map((r) => [r.session_campaign, r]));
-  const rows: CampaignTraffic[] = campaigns.map((c) => {
-    const channelGroup = c.platform === "meta" ? "Paid Social" : "Paid Search";
-    const ga4Row = c.utmCampaign ? ga4.get(c.utmCampaign) : undefined;
-    if (!ga4Row) {
-      return {
-        campaign: c.name,
-        platform: c.platform,
-        channelGroup,
-        sessions: null,
-        engagedSessions: null,
-        engagementRate: null,
-        transactions: 0,
-        revenue: 0,
-        aov: 0,
-        utmMatched: false,
-      };
-    }
-    const sessions = num(ga4Row.sessions);
-    const transactions = Math.round(num(ga4Row.conversions));
-    const revenue = r2(num(ga4Row.revenue));
-    return {
-      campaign: c.name,
-      platform: c.platform,
-      channelGroup,
-      sessions: Math.round(sessions),
-      engagedSessions: Math.round(num(ga4Row.engaged)),
-      engagementRate: sessions > 0 ? r4(num(ga4Row.engaged) / sessions) : 0,
-      transactions,
-      revenue,
-      aov: transactions > 0 ? r2(revenue / transactions) : 0,
-      utmMatched: true,
-    };
-  });
 
-  const notSet = ga4.get("(not set)");
-  if (notSet) {
-    const sessions = num(notSet.sessions);
-    const transactions = Math.round(num(notSet.conversions));
-    const revenue = r2(num(notSet.revenue));
-    rows.push({
-      campaign: "(not set)",
-      platform: null,
-      channelGroup: "Organic, direct, email, referral",
-      sessions: Math.round(sessions),
-      engagedSessions: Math.round(num(notSet.engaged)),
-      engagementRate: sessions > 0 ? r4(num(notSet.engaged) / sessions) : 0,
-      transactions,
-      revenue,
-      aov: transactions > 0 ? r2(revenue / transactions) : 0,
-      utmMatched: true,
-    });
+  const matchByUtm = new Map(matchRows.rows.map((r) => [r.utm_campaign, r]));
+
+  interface CampaignAcc {
+    sessions: number;
+    engaged: number;
+    conversions: number;
+    revenue: number;
+    addToCarts: number;
+    topSourceMedium: string;
+    topSourceMediumSessions: number;
+  }
+  const byCampaign = new Map<string, CampaignAcc>();
+  for (const r of ga4Rows.rows) {
+    const sessions = num(r.sessions);
+    const acc = byCampaign.get(r.session_campaign) ?? {
+      sessions: 0,
+      engaged: 0,
+      conversions: 0,
+      revenue: 0,
+      addToCarts: 0,
+      topSourceMedium: r.session_source_medium,
+      topSourceMediumSessions: 0,
+    };
+    acc.sessions += sessions;
+    acc.engaged += num(r.engaged);
+    acc.conversions += num(r.conversions);
+    acc.revenue += num(r.revenue);
+    acc.addToCarts += num(r.add_to_carts);
+    if (sessions > acc.topSourceMediumSessions) {
+      acc.topSourceMediumSessions = sessions;
+      acc.topSourceMedium = r.session_source_medium;
+    }
+    byCampaign.set(r.session_campaign, acc);
   }
 
-  return rows.sort((a, b) => (b.sessions ?? 0) - (a.sessions ?? 0));
+  return [...byCampaign.entries()]
+    .map(([campaign, acc]) => {
+      const match = matchByUtm.get(campaign);
+      const transactions = Math.round(acc.conversions);
+      const revenue = r2(acc.revenue);
+      return {
+        campaign,
+        sourceMedium: acc.topSourceMedium,
+        sessions: Math.round(acc.sessions),
+        engagedSessions: Math.round(acc.engaged),
+        engagementRate: acc.sessions > 0 ? r4(acc.engaged / acc.sessions) : 0,
+        addToCarts: Math.round(acc.addToCarts),
+        transactions,
+        revenue,
+        aov: transactions > 0 ? r2(revenue / transactions) : 0,
+        matchedPlatform: match?.platform ?? null,
+        matchedCampaignName: match?.platform_campaign_name ?? null,
+      };
+    })
+    .sort((a, b) => b.sessions - a.sessions);
 }
 
 export interface ContentTraffic {
@@ -1095,6 +1130,7 @@ export interface ContentTraffic {
   sessions: number;
   engagedSessions: number;
   engagementRate: number;
+  addToCarts: number;
   transactions: number;
   revenue: number;
   aov: number;
@@ -1108,9 +1144,10 @@ export async function getContentTraffic(clientId: string, range: ResolvedRange):
     engaged: string | null;
     conversions: string | null;
     revenue: string | null;
+    add_to_carts: string | null;
   }>`
     select session_campaign, session_ad_content, sum(sessions) as sessions, sum(engaged_sessions) as engaged,
-      sum(ga4_conversions) as conversions, sum(ga4_revenue) as revenue
+      sum(ga4_conversions) as conversions, sum(ga4_revenue) as revenue, sum(add_to_carts) as add_to_carts
     from fact_ga4_content
     where client_id = ${clientId}::uuid and date between ${range.start}::date and ${range.end}::date
     group by session_campaign, session_ad_content
@@ -1126,6 +1163,7 @@ export async function getContentTraffic(clientId: string, range: ResolvedRange):
         sessions: Math.round(sessions),
         engagedSessions: Math.round(num(r.engaged)),
         engagementRate: sessions > 0 ? r4(num(r.engaged) / sessions) : 0,
+        addToCarts: Math.round(num(r.add_to_carts)),
         transactions,
         revenue,
         aov: transactions > 0 ? r2(revenue / transactions) : 0,

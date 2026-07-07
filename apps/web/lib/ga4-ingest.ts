@@ -10,7 +10,14 @@
 import { getDb } from "./db";
 import { getGa4RefreshToken } from "./admin-store";
 import { refreshGa4AccessToken } from "./ga4-oauth";
-import { fetchGa4CampaignReport, fetchGa4TrafficReport, type Ga4CampaignReportRow, type Ga4TrafficReportRow } from "./ga4-reports";
+import {
+  fetchGa4CampaignReport,
+  fetchGa4ContentReport,
+  fetchGa4TrafficReport,
+  type Ga4CampaignReportRow,
+  type Ga4ContentReportRow,
+  type Ga4TrafficReportRow,
+} from "./ga4-reports";
 
 export interface Ga4JobResult {
   date: string;
@@ -36,6 +43,7 @@ async function upsertGa4Traffic(clientId: string, rows: Ga4TrafficReportRow[]): 
         bounce_rate: r.bounceRate,
         new_users: String(r.newUsers),
         total_users: String(r.totalUsers),
+        add_to_carts: String(r.addToCarts),
       })),
     )
     .onConflict((oc) =>
@@ -47,6 +55,7 @@ async function upsertGa4Traffic(clientId: string, rows: Ga4TrafficReportRow[]): 
         bounce_rate: eb.ref("excluded.bounce_rate"),
         new_users: eb.ref("excluded.new_users"),
         total_users: eb.ref("excluded.total_users"),
+        add_to_carts: eb.ref("excluded.add_to_carts"),
         loaded_at: new Date(),
       })),
     )
@@ -70,6 +79,7 @@ async function upsertGa4Campaign(clientId: string, rows: Ga4CampaignReportRow[])
         engagement_rate: r.engagementRate,
         ga4_conversions: r.conversions,
         ga4_revenue: r.revenue,
+        add_to_carts: String(r.addToCarts),
       })),
     )
     .onConflict((oc) =>
@@ -79,6 +89,41 @@ async function upsertGa4Campaign(clientId: string, rows: Ga4CampaignReportRow[])
         engagement_rate: eb.ref("excluded.engagement_rate"),
         ga4_conversions: eb.ref("excluded.ga4_conversions"),
         ga4_revenue: eb.ref("excluded.ga4_revenue"),
+        add_to_carts: eb.ref("excluded.add_to_carts"),
+        loaded_at: new Date(),
+      })),
+    )
+    .execute();
+}
+
+async function upsertGa4Content(clientId: string, rows: Ga4ContentReportRow[]): Promise<void> {
+  if (rows.length === 0) return;
+  const db = getDb();
+  await db
+    .insertInto("fact_ga4_content")
+    .values(
+      rows.map((r) => ({
+        client_id: clientId,
+        date: r.date,
+        session_source_medium: r.sourceMedium,
+        session_campaign: r.campaign,
+        session_ad_content: r.content,
+        sessions: String(r.sessions),
+        engaged_sessions: String(r.engagedSessions),
+        engagement_rate: r.engagementRate,
+        ga4_conversions: r.conversions,
+        ga4_revenue: r.revenue,
+        add_to_carts: String(r.addToCarts),
+      })),
+    )
+    .onConflict((oc) =>
+      oc.columns(["client_id", "date", "session_source_medium", "session_campaign", "session_ad_content"]).doUpdateSet((eb) => ({
+        sessions: eb.ref("excluded.sessions"),
+        engaged_sessions: eb.ref("excluded.engaged_sessions"),
+        engagement_rate: eb.ref("excluded.engagement_rate"),
+        ga4_conversions: eb.ref("excluded.ga4_conversions"),
+        ga4_revenue: eb.ref("excluded.ga4_revenue"),
+        add_to_carts: eb.ref("excluded.add_to_carts"),
         loaded_at: new Date(),
       })),
     )
@@ -115,11 +160,16 @@ export async function runPendingGa4Jobs(clientId: string): Promise<Ga4JobResult[
   for (const job of jobs) {
     await db.updateTable("ingest_jobs").set({ status: "running", started_at: new Date(), attempts: job.attempts + 1 }).where("id", "=", job.id).execute();
     try {
-      const [traffic, campaign] = await Promise.all([
+      const [traffic, campaign, content] = await Promise.all([
         fetchGa4TrafficReport(accessToken, propertyId, job.date),
         fetchGa4CampaignReport(accessToken, propertyId, job.date),
+        fetchGa4ContentReport(accessToken, propertyId, job.date),
       ]);
-      await Promise.all([upsertGa4Traffic(clientId, traffic), upsertGa4Campaign(clientId, campaign)]);
+      await Promise.all([
+        upsertGa4Traffic(clientId, traffic),
+        upsertGa4Campaign(clientId, campaign),
+        upsertGa4Content(clientId, content),
+      ]);
       await db.updateTable("ingest_jobs").set({ status: "succeeded", finished_at: new Date() }).where("id", "=", job.id).execute();
       results.push({ date: job.date, ok: true });
     } catch (err) {

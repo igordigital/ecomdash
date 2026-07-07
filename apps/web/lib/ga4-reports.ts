@@ -52,6 +52,7 @@ export interface Ga4TrafficReportRow {
   bounceRate: number;
   newUsers: number;
   totalUsers: number;
+  addToCarts: number;
 }
 
 const ymdToIso = (ymd: string) => `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}`;
@@ -62,7 +63,7 @@ export async function fetchGa4TrafficReport(accessToken: string, propertyId: str
     propertyId,
     date,
     ["date", "sessionDefaultChannelGroup", "sessionSourceMedium"],
-    ["sessions", "engagedSessions", "engagementRate", "averageSessionDuration", "bounceRate", "newUsers", "totalUsers"],
+    ["sessions", "engagedSessions", "engagementRate", "averageSessionDuration", "bounceRate", "newUsers", "totalUsers", "addToCarts"],
   );
   return rows.map((r) => ({
     date: ymdToIso(r.date!),
@@ -75,6 +76,7 @@ export async function fetchGa4TrafficReport(accessToken: string, propertyId: str
     bounceRate: Number(r.bounceRate ?? 0),
     newUsers: Number(r.newUsers ?? 0),
     totalUsers: Number(r.totalUsers ?? 0),
+    addToCarts: Number(r.addToCarts ?? 0),
   }));
 }
 
@@ -88,6 +90,7 @@ export interface Ga4CampaignReportRow {
   engagementRate: number;
   conversions: number;
   revenue: number;
+  addToCarts: number;
 }
 
 export async function fetchGa4CampaignReport(accessToken: string, propertyId: string, date: string): Promise<Ga4CampaignReportRow[]> {
@@ -96,7 +99,7 @@ export async function fetchGa4CampaignReport(accessToken: string, propertyId: st
     propertyId,
     date,
     ["date", "sessionSourceMedium", "sessionCampaignName", "deviceCategory"],
-    ["sessions", "engagedSessions", "engagementRate", "conversions", "totalRevenue"],
+    ["sessions", "engagedSessions", "engagementRate", "conversions", "totalRevenue", "addToCarts"],
   );
   return rows.map((r) => ({
     date: ymdToIso(r.date!),
@@ -108,5 +111,44 @@ export async function fetchGa4CampaignReport(accessToken: string, propertyId: st
     engagementRate: Number(r.engagementRate ?? 0),
     conversions: Number(r.conversions ?? 0),
     revenue: Number(r.totalRevenue ?? 0),
+    addToCarts: Number(r.addToCarts ?? 0),
   }));
+}
+
+export interface Ga4ContentReportRow {
+  date: string;
+  sourceMedium: string;
+  campaign: string;
+  content: string;
+  sessions: number;
+  engagedSessions: number;
+  engagementRate: number;
+  conversions: number;
+  revenue: number;
+  addToCarts: number;
+}
+
+/** utm_content breakdown: sessionManualAdContent is GA4's dimension for the utm_content parameter. */
+export async function fetchGa4ContentReport(accessToken: string, propertyId: string, date: string): Promise<Ga4ContentReportRow[]> {
+  const rows = await runReport(
+    accessToken,
+    propertyId,
+    date,
+    ["date", "sessionSourceMedium", "sessionCampaignName", "sessionManualAdContent"],
+    ["sessions", "engagedSessions", "engagementRate", "conversions", "totalRevenue", "addToCarts"],
+  );
+  return rows
+    .filter((r) => r.sessionManualAdContent && r.sessionManualAdContent !== "(not set)")
+    .map((r) => ({
+      date: ymdToIso(r.date!),
+      sourceMedium: r.sessionSourceMedium ?? "(not set)",
+      campaign: r.sessionCampaignName ?? "(not set)",
+      content: r.sessionManualAdContent!,
+      sessions: Number(r.sessions ?? 0),
+      engagedSessions: Number(r.engagedSessions ?? 0),
+      engagementRate: Number(r.engagementRate ?? 0),
+      conversions: Number(r.conversions ?? 0),
+      revenue: Number(r.totalRevenue ?? 0),
+      addToCarts: Number(r.addToCarts ?? 0),
+    }));
 }

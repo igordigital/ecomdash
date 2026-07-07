@@ -1,13 +1,13 @@
 import { TrafficChart } from "@/components/charts";
 import { RangeSelector } from "@/components/range-selector";
 import { Badge, Card, PageHeader, SectionTitle, StatCard } from "@/components/ui";
-import { fmtDuration, fmtNum, fmtNumCompact, fmtPct, fmtUsd, fmtUsdCompact } from "@/lib/format";
+import { fmtDuration, fmtNum, fmtNumCompact, fmtPct, makeCurrencyFormatters } from "@/lib/format";
 import { resolveRange, type RangeSearchParams } from "@/lib/range";
 import { resolveViewedClientId } from "@/lib/viewed-client";
 import {
-  CHANNELS,
   getCampaignTraffic,
   getChannelSummaries,
+  getClientCurrency,
   getContentTraffic,
   getEarliestDate,
   getLatestDate,
@@ -21,13 +21,18 @@ export default async function TrafficPage({ searchParams }: { searchParams: Prom
   const latestDate = getLatestDate();
   const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
   const clientId = await resolveViewedClientId(sp.clientId);
-  const [series, channels, campaigns, content, ecommerce] = await Promise.all([
-    getTrafficSeries(clientId, range),
+
+  // Channels first: the chart's series list is exactly the top-10 channel names from the table, so they always match.
+  const [channels, campaigns, content, ecommerce, currency] = await Promise.all([
     getChannelSummaries(clientId, range),
     getCampaignTraffic(clientId, range),
     getContentTraffic(clientId, range),
     getTrafficEcommerceSummary(clientId, range),
+    getClientCurrency(clientId),
   ]);
+  const channelNames = channels.map((c) => c.channel);
+  const series = await getTrafficSeries(clientId, range, channelNames);
+  const { fmtUsd, fmtUsdCompact } = makeCurrencyFormatters(currency);
 
   return (
     <>
@@ -47,15 +52,17 @@ export default async function TrafficPage({ searchParams }: { searchParams: Prom
         <StatCard label="Ecommerce conv. rate" value={fmtPct(ecommerce.ecommerceConversionRate)} hint={`AOV ${fmtUsd(ecommerce.aov)}`} />
       </div>
 
-      <SectionTitle>Channels</SectionTitle>
-      <Card title="Daily sessions by channel" subtitle={`${range.label}, stacked.`}>
-        <TrafficChart data={series} channels={CHANNELS} />
+      <SectionTitle hint="Top 10 channels by sessions, GA4's own default channel grouping (includes Paid Shopping, Cross-network, etc. as reported).">
+        Channels
+      </SectionTitle>
+      <Card title="Daily sessions by channel" subtitle={`${range.label}, stacked, top ${channelNames.length}.`}>
+        <TrafficChart data={series} channels={channelNames} />
       </Card>
 
       <div className="mt-4">
         <Card subtitle={`${range.label}, per channel. No crosswalk needed.`}>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px] text-sm">
+            <table className="w-full min-w-[760px] text-sm">
               <thead>
                 <tr className="border-b border-slate-800 text-left text-xs uppercase tracking-wide text-slate-500">
                   <th className="pb-2 pr-4 font-medium">Channel</th>
@@ -63,7 +70,8 @@ export default async function TrafficPage({ searchParams }: { searchParams: Prom
                   <th className="pb-2 pr-4 text-right font-medium">Engagement rate</th>
                   <th className="pb-2 pr-4 text-right font-medium">Avg session</th>
                   <th className="pb-2 pr-4 text-right font-medium">Bounce rate</th>
-                  <th className="pb-2 text-right font-medium">New users</th>
+                  <th className="pb-2 pr-4 text-right font-medium">New users</th>
+                  <th className="pb-2 text-right font-medium">Add to carts</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
@@ -74,7 +82,8 @@ export default async function TrafficPage({ searchParams }: { searchParams: Prom
                     <td className="py-2.5 pr-4 text-right tabular-nums">{fmtPct(ch.engagementRate)}</td>
                     <td className="py-2.5 pr-4 text-right tabular-nums">{fmtDuration(ch.avgSessionDuration)}</td>
                     <td className="py-2.5 pr-4 text-right tabular-nums">{fmtPct(ch.bounceRate)}</td>
-                    <td className="py-2.5 text-right tabular-nums">{fmtPct(ch.newUserShare)}</td>
+                    <td className="py-2.5 pr-4 text-right tabular-nums">{fmtPct(ch.newUserShare)}</td>
+                    <td className="py-2.5 text-right tabular-nums">{fmtNum(ch.addToCarts)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -83,18 +92,20 @@ export default async function TrafficPage({ searchParams }: { searchParams: Prom
         </Card>
       </div>
 
-      <SectionTitle hint="Google links to GA4 natively via GCLID. Meta depends on UTM tagging: a poorly tagged campaign shows no UTM match here, same as on the Campaigns page.">
+      <SectionTitle hint="Every campaign GA4 has session data for, matched to a known ad campaign or not. Google links to GA4 natively via GCLID; Meta and other sources depend on UTM tagging.">
         Campaigns
       </SectionTitle>
       <Card subtitle={`${range.label}. Ecommerce columns are GA4's own attribution: diagnostic only.`}>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] text-sm">
+          <table className="w-full min-w-[920px] text-sm">
             <thead>
               <tr className="border-b border-slate-800 text-left text-xs uppercase tracking-wide text-slate-500">
-                <th className="pb-2 pr-4 font-medium">Campaign</th>
-                <th className="pb-2 pr-4 font-medium">Channel group</th>
+                <th className="pb-2 pr-4 font-medium">Campaign (utm_campaign)</th>
+                <th className="pb-2 pr-4 font-medium">Top source / medium</th>
+                <th className="pb-2 pr-4 font-medium">Matched ad campaign</th>
                 <th className="pb-2 pr-4 text-right font-medium">Sessions</th>
                 <th className="pb-2 pr-4 text-right font-medium">Engagement rate</th>
+                <th className="pb-2 pr-4 text-right font-medium">Add to carts</th>
                 <th className="pb-2 pr-4 text-right font-medium">Transactions (diag)</th>
                 <th className="pb-2 pr-4 text-right font-medium">Revenue (diag)</th>
                 <th className="pb-2 text-right font-medium">AOV</th>
@@ -102,49 +113,21 @@ export default async function TrafficPage({ searchParams }: { searchParams: Prom
             </thead>
             <tbody className="divide-y divide-slate-800/60">
               {campaigns.map((c) => (
-                <tr key={`${c.platform}-${c.campaign}`} className="text-slate-300">
-                  <td className="py-2.5 pr-4 font-medium text-slate-200">{c.campaign}</td>
-                  <td className="py-2.5 pr-4 text-xs text-slate-400">{c.channelGroup}</td>
-                  <td className="py-2.5 pr-4 text-right tabular-nums">
-                    {c.sessions !== null ? fmtNumCompact(c.sessions) : <Badge tone="warn">no UTM match</Badge>}
+                <tr key={c.campaign} className="text-slate-300">
+                  <td className="max-w-56 truncate py-2.5 pr-4 font-medium text-slate-200">{c.campaign}</td>
+                  <td className="max-w-40 truncate py-2.5 pr-4 text-xs text-slate-400">{c.sourceMedium}</td>
+                  <td className="py-2.5 pr-4">
+                    {c.matchedPlatform ? (
+                      <span className="text-xs text-slate-300">
+                        {c.matchedPlatform === "meta" ? "Meta" : "Google"} · {c.matchedCampaignName}
+                      </span>
+                    ) : (
+                      <Badge tone="neutral">Not matched</Badge>
+                    )}
                   </td>
-                  <td className="py-2.5 pr-4 text-right tabular-nums">
-                    {c.engagementRate !== null ? fmtPct(c.engagementRate) : <span className="text-slate-600">n/a</span>}
-                  </td>
-                  <td className="py-2.5 pr-4 text-right tabular-nums">{c.utmMatched ? fmtNum(c.transactions) : "n/a"}</td>
-                  <td className="py-2.5 pr-4 text-right tabular-nums">{c.utmMatched ? fmtUsd(c.revenue) : "n/a"}</td>
-                  <td className="py-2.5 text-right tabular-nums">{c.utmMatched && c.transactions > 0 ? fmtUsd(c.aov) : "n/a"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      <SectionTitle hint="utm_content (ad / creative). Meta only in this account: Google's ads do not carry manual content tags.">
-        Ads (content)
-      </SectionTitle>
-      <Card subtitle={`${range.label}. Ecommerce columns are GA4's own attribution: diagnostic only.`}>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[780px] text-sm">
-            <thead>
-              <tr className="border-b border-slate-800 text-left text-xs uppercase tracking-wide text-slate-500">
-                <th className="pb-2 pr-4 font-medium">Ad (content)</th>
-                <th className="pb-2 pr-4 font-medium">Campaign</th>
-                <th className="pb-2 pr-4 text-right font-medium">Sessions</th>
-                <th className="pb-2 pr-4 text-right font-medium">Engagement rate</th>
-                <th className="pb-2 pr-4 text-right font-medium">Transactions (diag)</th>
-                <th className="pb-2 pr-4 text-right font-medium">Revenue (diag)</th>
-                <th className="pb-2 text-right font-medium">AOV</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60">
-              {content.map((c) => (
-                <tr key={`${c.campaign}-${c.content}`} className="text-slate-300">
-                  <td className="max-w-64 truncate py-2.5 pr-4 font-medium text-slate-200">{c.content}</td>
-                  <td className="max-w-48 truncate py-2.5 pr-4 text-xs text-slate-400">{c.campaign}</td>
                   <td className="py-2.5 pr-4 text-right tabular-nums">{fmtNumCompact(c.sessions)}</td>
                   <td className="py-2.5 pr-4 text-right tabular-nums">{fmtPct(c.engagementRate)}</td>
+                  <td className="py-2.5 pr-4 text-right tabular-nums">{fmtNum(c.addToCarts)}</td>
                   <td className="py-2.5 pr-4 text-right tabular-nums">{fmtNum(c.transactions)}</td>
                   <td className="py-2.5 pr-4 text-right tabular-nums">{fmtUsd(c.revenue)}</td>
                   <td className="py-2.5 text-right tabular-nums">{c.transactions > 0 ? fmtUsd(c.aov) : "n/a"}</td>
@@ -153,9 +136,50 @@ export default async function TrafficPage({ searchParams }: { searchParams: Prom
             </tbody>
           </table>
         </div>
+      </Card>
+
+      <SectionTitle hint="utm_content (ad / creative), GA4's sessionManualAdContent dimension.">Ads (content)</SectionTitle>
+      <Card subtitle={`${range.label}. Ecommerce columns are GA4's own attribution: diagnostic only.`}>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[860px] text-sm">
+            <thead>
+              <tr className="border-b border-slate-800 text-left text-xs uppercase tracking-wide text-slate-500">
+                <th className="pb-2 pr-4 font-medium">Ad (content)</th>
+                <th className="pb-2 pr-4 font-medium">Campaign</th>
+                <th className="pb-2 pr-4 text-right font-medium">Sessions</th>
+                <th className="pb-2 pr-4 text-right font-medium">Engagement rate</th>
+                <th className="pb-2 pr-4 text-right font-medium">Add to carts</th>
+                <th className="pb-2 pr-4 text-right font-medium">Transactions (diag)</th>
+                <th className="pb-2 pr-4 text-right font-medium">Revenue (diag)</th>
+                <th className="pb-2 text-right font-medium">AOV</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60">
+              {content.length > 0 ? (
+                content.map((c) => (
+                  <tr key={`${c.campaign}-${c.content}`} className="text-slate-300">
+                    <td className="max-w-64 truncate py-2.5 pr-4 font-medium text-slate-200">{c.content}</td>
+                    <td className="max-w-48 truncate py-2.5 pr-4 text-xs text-slate-400">{c.campaign}</td>
+                    <td className="py-2.5 pr-4 text-right tabular-nums">{fmtNumCompact(c.sessions)}</td>
+                    <td className="py-2.5 pr-4 text-right tabular-nums">{fmtPct(c.engagementRate)}</td>
+                    <td className="py-2.5 pr-4 text-right tabular-nums">{fmtNum(c.addToCarts)}</td>
+                    <td className="py-2.5 pr-4 text-right tabular-nums">{fmtNum(c.transactions)}</td>
+                    <td className="py-2.5 pr-4 text-right tabular-nums">{fmtUsd(c.revenue)}</td>
+                    <td className="py-2.5 text-right tabular-nums">{c.transactions > 0 ? fmtUsd(c.aov) : "n/a"}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={8} className="py-4 text-center text-sm text-slate-500">
+                    No utm_content tagging in this range.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
         <p className="mt-4 text-xs text-slate-500">
-          Ads under a campaign with no UTM match are excluded here too: content tags are a sub-dimension of the
-          campaign tag, so if the campaign-level join fails, content can&apos;t resolve either.
+          Only sessions with a utm_content tag are shown; sessions without one don&apos;t resolve to a specific ad.
         </p>
       </Card>
     </>

@@ -1,10 +1,10 @@
 import { MetricTrend } from "@/components/charts";
 import { RangeSelector } from "@/components/range-selector";
 import { Card, Delta, PageHeader, SectionTitle, StatCard, StockChip } from "@/components/ui";
-import { fmtNum, fmtPct, fmtUsd, fmtUsdCompact } from "@/lib/format";
+import { fmtNum, fmtPct, makeCurrencyFormatters } from "@/lib/format";
 import { resolveRange, type RangeSearchParams } from "@/lib/range";
 import { resolveViewedClientId } from "@/lib/viewed-client";
-import { getEarliestDate, getLatestDate, getStoreKpis, getTopProducts } from "@/lib/dashboard-data";
+import { getClientCurrency, getEarliestDate, getLatestDate, getStoreKpis, getTopProducts } from "@/lib/dashboard-data";
 
 export default async function StorePage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
   const sp = await searchParams;
@@ -12,7 +12,12 @@ export default async function StorePage({ searchParams }: { searchParams: Promis
   const latestDate = getLatestDate();
   const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
   const clientId = await resolveViewedClientId(sp.clientId);
-  const [{ cur, prev, daily }, products] = await Promise.all([getStoreKpis(clientId, range), getTopProducts(clientId, range)]);
+  const [{ cur, prev, daily }, products, currency] = await Promise.all([
+    getStoreKpis(clientId, range),
+    getTopProducts(clientId, range),
+    getClientCurrency(clientId),
+  ]);
+  const { fmtUsd, fmtUsdCompact } = makeCurrencyFormatters(currency);
 
   return (
     <>

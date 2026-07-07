@@ -1,10 +1,10 @@
 import { MetricTrend } from "@/components/charts";
 import { RangeSelector } from "@/components/range-selector";
 import { Badge, Card, Funnel, HealthChip, PageHeader, SectionTitle, StatCard } from "@/components/ui";
-import { fmtNum, fmtNumCompact, fmtPct, fmtRatio, fmtUsd, fmtUsdCompact } from "@/lib/format";
+import { fmtNum, fmtNumCompact, fmtPct, fmtRatio, makeCurrencyFormatters } from "@/lib/format";
 import { resolveRange, type RangeSearchParams } from "@/lib/range";
 import { resolveViewedClientId } from "@/lib/viewed-client";
-import { getEarliestDate, getGoogleCampaigns, getLatestDate, getNetworkFunnel, getNetworkKpis } from "@/lib/dashboard-data";
+import { getClientCurrency, getEarliestDate, getGoogleCampaigns, getLatestDate, getNetworkFunnel, getNetworkKpis } from "@/lib/dashboard-data";
 
 export default async function GooglePage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
   const sp = await searchParams;
@@ -13,11 +13,13 @@ export default async function GooglePage({ searchParams }: { searchParams: Promi
   const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
   const clientId = await resolveViewedClientId(sp.clientId);
 
-  const [networkKpis, funnel, campaigns] = await Promise.all([
+  const [networkKpis, funnel, campaigns, currency] = await Promise.all([
     getNetworkKpis(clientId, "google", range),
     getNetworkFunnel(clientId, "google", range),
     getGoogleCampaigns(clientId, range),
+    getClientCurrency(clientId),
   ]);
+  const { fmtUsd, fmtUsdCompact } = makeCurrencyFormatters(currency);
   const { cur, prev, trend, sparkSpend, sparkRoas } = networkKpis;
 
   return (

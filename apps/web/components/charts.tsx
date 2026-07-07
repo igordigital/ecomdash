@@ -133,9 +133,13 @@ const CHANNEL_COLORS: Record<string, string> = {
   "Organic Search": "#34d399",
   "Paid Social": "#38bdf8",
   "Paid Search": "#a78bfa",
+  "Paid Shopping": "#fb923c",
+  "Cross-network": "#facc15",
   "Direct": "#f59e0b",
   "Email": "#f472b6",
   "Referral": "#64748b",
+  "Organic Social": "#22d3ee",
+  "Organic Shopping": "#c084fc",
 };
 
 export function TrafficChart({ data, channels }: { data: TrafficDay[]; channels: readonly string[] }) {

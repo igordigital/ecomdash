@@ -11,12 +11,13 @@ import {
   ShareBar,
   StatCard,
 } from "@/components/ui";
-import { fmtNum, fmtPct, fmtRatio, fmtUsd, fmtUsdCompact } from "@/lib/format";
+import { fmtNum, fmtPct, fmtRatio, makeCurrencyFormatters } from "@/lib/format";
 import { rangeQueryString, resolveRange, withPreviewParams, type RangeSearchParams } from "@/lib/range";
 import { resolveViewedClientId } from "@/lib/viewed-client";
 import {
   MER_TARGET,
   getAnomalies,
+  getClientCurrency,
   getEarliestDate,
   getLatestDate,
   getMerSeries,
@@ -38,7 +39,7 @@ export default async function OverviewPage({
   const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
   const clientId = await resolveViewedClientId(sp.clientId);
 
-  const [rolling, kpis, store, series, meta, google, funnel, anomalies] = await Promise.all([
+  const [rolling, kpis, store, series, meta, google, funnel, anomalies, currency] = await Promise.all([
     getRollingWindows(clientId),
     getOverviewKpis(clientId, range),
     getStoreKpis(clientId, range),
@@ -47,7 +48,9 @@ export default async function OverviewPage({
     getNetworkKpis(clientId, "google", range),
     getSiteFunnel(clientId, range),
     getAnomalies(clientId, range),
+    getClientCurrency(clientId),
   ]);
+  const { fmtUsd, fmtUsdCompact } = makeCurrencyFormatters(currency);
   const topAnomalies = anomalies.slice(0, 3);
 
   return (

@@ -141,13 +141,19 @@ export function NewClientWizard({
                   onChange={(e) => patch({ timezone: e.target.value })}
                   className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
                 >
-                  {["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Toronto", "UTC"].map(
-                    (tz) => (
-                      <option key={tz} value={tz}>
-                        {tz}
-                      </option>
-                    ),
-                  )}
+                  {[
+                    "America/New_York",
+                    "America/Chicago",
+                    "America/Denver",
+                    "America/Los_Angeles",
+                    "America/Toronto",
+                    "Asia/Jerusalem",
+                    "UTC",
+                  ].map((tz) => (
+                    <option key={tz} value={tz}>
+                      {tz}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label className="grid gap-1 text-sm">
@@ -157,7 +163,7 @@ export function NewClientWizard({
                   onChange={(e) => patch({ currency: e.target.value })}
                   className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
                 >
-                  {["USD", "CAD", "EUR", "GBP"].map((c) => (
+                  {["USD", "CAD", "EUR", "GBP", "ILS"].map((c) => (
                     <option key={c} value={c}>
                       {c}
                     </option>

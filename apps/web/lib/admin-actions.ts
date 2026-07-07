@@ -206,11 +206,6 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
   return performLogin(formData);
 }
 
-/** Same as loginAction but shaped for a plain <form action={...}>, used by the login page's one-click demo accounts. */
-export async function quickLoginAction(formData: FormData): Promise<void> {
-  await performLogin(formData);
-}
-
 export async function logoutAction(): Promise<void> {
   const jar = await cookies();
   jar.delete(SESSION_COOKIE);

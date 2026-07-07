@@ -1,8 +1,12 @@
 import { cookies } from "next/headers";
 import { SESSION_COOKIE, verifySession } from "./auth";
+import { getClients } from "./admin-store";
 
-/** Fallback when nothing else applies (no session, or staff not previewing anyone). */
-export const DEFAULT_CLIENT_ID = "c-1";
+/** Fallback when nothing else applies (no session, or staff not previewing anyone): the earliest-created client. */
+async function getDefaultClientId(): Promise<string> {
+  const clients = await getClients();
+  return clients[0]?.id ?? "";
+}
 
 /**
  * Resolves which client's data a dashboard page should render. A real
@@ -14,7 +18,7 @@ export const DEFAULT_CLIENT_ID = "c-1";
 export async function resolveViewedClientId(searchParamsClientId?: string): Promise<string> {
   const jar = await cookies();
   const session = await verifySession(jar.get(SESSION_COOKIE)?.value);
-  if (session?.role === "client") return session.clientId ?? DEFAULT_CLIENT_ID;
+  if (session?.role === "client") return session.clientId ?? (await getDefaultClientId());
   if (searchParamsClientId) return searchParamsClientId;
-  return DEFAULT_CLIENT_ID;
+  return getDefaultClientId();
 }

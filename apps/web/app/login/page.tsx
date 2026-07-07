@@ -10,7 +10,8 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string }>;
 }) {
   const { next } = await searchParams;
-  const users = getUsers();
+  const users = await getUsers();
+  const clientsById = new Map((await Promise.all(users.filter((u) => u.clientId).map((u) => getClient(u.clientId!)))).map((c) => [c?.id, c]));
 
   return (
     <div className="grid w-full max-w-3xl gap-8 md:grid-cols-2">
@@ -31,7 +32,7 @@ export default async function LoginPage({
         </p>
         <ul className="mt-4 grid gap-2">
           {users.map((u) => {
-            const client = u.clientId ? getClient(u.clientId) : undefined;
+            const client = u.clientId ? clientsById.get(u.clientId) : undefined;
             return (
               <li key={u.id}>
                 <form action={quickLoginAction} className="flex items-center justify-between gap-3 rounded border border-slate-800 px-3 py-2">

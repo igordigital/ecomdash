@@ -1,14 +1,15 @@
 import { AdminPageHeader } from "@/components/admin/ui";
 import { Badge, Card } from "@/components/ui";
-import { AGENCY_INTEGRATIONS, getGa4Properties, getGoogleAccounts, getMetaAccounts } from "@/lib/admin-store";
+import { getAgencyIntegrations, getGa4Properties, getGoogleAccounts, getMetaAccounts } from "@/lib/admin-store";
 
-export default function IntegrationsPage() {
-  const google = AGENCY_INTEGRATIONS.google;
-  const meta = AGENCY_INTEGRATIONS.meta;
-  const ga4 = AGENCY_INTEGRATIONS.ga4;
-  const googleAccounts = getGoogleAccounts();
-  const metaAccounts = getMetaAccounts();
-  const ga4Properties = getGa4Properties();
+export default async function IntegrationsPage() {
+  const [integrations, googleAccounts, metaAccounts, ga4Properties] = await Promise.all([
+    getAgencyIntegrations(),
+    getGoogleAccounts(),
+    getMetaAccounts(),
+    getGa4Properties(),
+  ]);
+  const { google, meta, ga4 } = integrations;
 
   return (
     <>

@@ -1,16 +1,17 @@
 /**
- * Admin panel demo store. In-memory only: mutations from Server Actions
- * persist for the life of this dev server process, then reset. Stands in
- * for what will be dim_client, client_credentials, and a users/roles table
- * once the pipeline and real auth land.
+ * Admin panel data layer, backed by Supabase Postgres (dim_client,
+ * app_users, client_credentials, ingest_jobs, agency_integrations,
+ * agency_ad_accounts). Replaces the old globalThis in-memory demo store.
  *
- * The point being demonstrated: Meta, Google Ads, and GA4 are authorized
- * ONCE at the agency level (system user token, MCC refresh token, shared
- * service account). Assigning a client to a platform is then just picking
- * an already-visible account/property, never a new OAuth flow. Shopify and
- * WooCommerce cannot be pre-authorized this way (each store has its own
- * owner), so they keep a per-client connect step.
+ * Meta, Google Ads, and GA4 are authorized ONCE at the agency level
+ * (agency_integrations + agency_ad_accounts); assigning a client to a
+ * platform is then just picking an already-visible account/property
+ * (client_credentials), never a new OAuth flow. Shopify and WooCommerce
+ * cannot be pre-authorized this way, so they keep a per-client connect step.
  */
+
+import { sql } from "kysely";
+import { getDb } from "./db";
 
 export type Role = "admin" | "analyst" | "client";
 
@@ -32,58 +33,66 @@ export interface Ga4Property {
   domain: string;
 }
 
-export const AGENCY_INTEGRATIONS = {
-  google: {
-    connected: true,
-    mccId: "123-456-7890",
-    developerTokenStatus: "approved" as const, // real-world: pending Basic access approval
-    connectedAt: "2026-06-02",
-  },
-  meta: {
-    connected: true,
-    businessManagerId: "987654321012345",
-    businessManagerName: "Acme Media Group",
-    connectedAt: "2026-06-02",
-  },
-  ga4: {
-    connected: true,
-    serviceAccountEmail: "ecomdash-ga4-reader@ecomdash-prod.iam.gserviceaccount.com",
-    connectedAt: "2026-06-03",
-  },
-};
-
-const GOOGLE_ACCOUNTS: GoogleAdsAccount[] = [
-  { customerId: "412-556-7890", name: "Acme Outdoors", currency: "USD" },
-  { customerId: "556-223-1147", name: "Northwind Coffee Co.", currency: "USD" },
-  { customerId: "778-902-3345", name: "Solstice Skincare", currency: "USD" },
-  { customerId: "334-118-6620", name: "Harbor & Pine Furniture", currency: "CAD" },
-  { customerId: "990-441-2287", name: "Lumen Athletics", currency: "USD" },
-];
-
-const META_ACCOUNTS: MetaAdAccount[] = [
-  { accountId: "act_10897234561", name: "Acme Outdoors", currency: "USD" },
-  { accountId: "act_10897234782", name: "Northwind Coffee Co.", currency: "USD" },
-  { accountId: "act_10897235014", name: "Solstice Skincare", currency: "USD" },
-  { accountId: "act_10897235339", name: "Harbor & Pine Furniture", currency: "CAD" },
-  { accountId: "act_10897235601", name: "Lumen Athletics", currency: "USD" },
-];
-
-const GA4_PROPERTIES: Ga4Property[] = [
-  { propertyId: "properties/348219004", name: "Acme Outdoors — Production", domain: "acmeoutdoors.com" },
-  { propertyId: "properties/348219115", name: "Northwind Coffee — Production", domain: "northwindcoffee.co" },
-  { propertyId: "properties/348219226", name: "Solstice Skincare — Production", domain: "solsticeskincare.com" },
-  { propertyId: "properties/348219337", name: "Harbor & Pine — Production", domain: "harborandpine.ca" },
-  { propertyId: "properties/348219448", name: "Lumen Athletics — Production", domain: "lumenathletics.com" },
-];
-
-export function getGoogleAccounts(): GoogleAdsAccount[] {
-  return GOOGLE_ACCOUNTS;
+export interface GoogleIntegration {
+  connected: boolean;
+  mccId: string;
+  developerTokenStatus: "approved" | "pending";
+  connectedAt: string | null;
 }
-export function getMetaAccounts(): MetaAdAccount[] {
-  return META_ACCOUNTS;
+export interface MetaIntegration {
+  connected: boolean;
+  businessManagerId: string;
+  businessManagerName: string;
+  connectedAt: string | null;
 }
-export function getGa4Properties(): Ga4Property[] {
-  return GA4_PROPERTIES;
+export interface Ga4Integration {
+  connected: boolean;
+  serviceAccountEmail: string;
+  connectedAt: string | null;
+}
+export interface AgencyIntegrations {
+  google: GoogleIntegration;
+  meta: MetaIntegration;
+  ga4: Ga4Integration;
+}
+
+export async function getAgencyIntegrations(): Promise<AgencyIntegrations> {
+  const rows = await getDb().selectFrom("agency_integrations").selectAll().execute();
+  const byPlatform = new Map(rows.map((r) => [r.platform, r]));
+  const g = byPlatform.get("google");
+  const m = byPlatform.get("meta");
+  const a = byPlatform.get("ga4");
+  const ref = <T>(row: typeof g, fallback: T): T => (row?.external_ref as T) ?? fallback;
+  return {
+    google: {
+      connected: g?.connected ?? false,
+      connectedAt: g?.connected_at ? String(g.connected_at).slice(0, 10) : null,
+      ...ref(g, { mccId: "", developerTokenStatus: "pending" as const }),
+    },
+    meta: {
+      connected: m?.connected ?? false,
+      connectedAt: m?.connected_at ? String(m.connected_at).slice(0, 10) : null,
+      ...ref(m, { businessManagerId: "", businessManagerName: "" }),
+    },
+    ga4: {
+      connected: a?.connected ?? false,
+      connectedAt: a?.connected_at ? String(a.connected_at).slice(0, 10) : null,
+      ...ref(a, { serviceAccountEmail: "" }),
+    },
+  };
+}
+
+export async function getGoogleAccounts(): Promise<GoogleAdsAccount[]> {
+  const rows = await getDb().selectFrom("agency_ad_accounts").selectAll().where("platform", "=", "google").execute();
+  return rows.map((r) => ({ customerId: r.external_id, name: r.name, currency: r.currency ?? "USD" }));
+}
+export async function getMetaAccounts(): Promise<MetaAdAccount[]> {
+  const rows = await getDb().selectFrom("agency_ad_accounts").selectAll().where("platform", "=", "meta").execute();
+  return rows.map((r) => ({ accountId: r.external_id, name: r.name, currency: r.currency ?? "USD" }));
+}
+export async function getGa4Properties(): Promise<Ga4Property[]> {
+  const rows = await getDb().selectFrom("agency_ad_accounts").selectAll().where("platform", "=", "ga4").execute();
+  return rows.map((r) => ({ propertyId: r.external_id, name: r.name, domain: r.domain ?? "" }));
 }
 
 export type BackfillStatus = "not_started" | "queued" | "running" | "complete";
@@ -91,16 +100,29 @@ export type ConnectionStatus = "connected" | "needs_reauth" | "not_connected";
 export type BackfillSourceKey = "google" | "meta" | "ga4" | "store";
 export const BACKFILL_SOURCES: BackfillSourceKey[] = ["google", "meta", "ga4", "store"];
 
+/** ingest_jobs.source is the connector's own key ("google-ads"), not the shorter admin-UI key ("google"). */
+const SOURCE_TO_INGEST: Record<BackfillSourceKey, string> = {
+  google: "google-ads",
+  meta: "meta",
+  ga4: "ga4",
+  store: "shopify", // resolved per-client to the actual store type when building the row
+};
+const CREDENTIAL_SOURCE: Record<BackfillSourceKey, string[]> = {
+  google: ["google-ads"],
+  meta: ["meta"],
+  ga4: ["ga4"],
+  store: ["shopify", "woo"],
+};
+
 export interface SourceBackfillState {
   status: BackfillStatus;
-  /** Date range of the most recently requested or completed backfill for this source, inclusive. */
   range: { start: string; end: string } | null;
 }
 
 export interface StoreConnection {
   type: "shopify" | "woocommerce";
   domain: string;
-  includedStatuses?: string[]; // WooCommerce only
+  includedStatuses?: string[];
   status: ConnectionStatus;
 }
 
@@ -115,7 +137,6 @@ export interface AdminClient {
   meta: { accountId: string; name: string; status: ConnectionStatus } | null;
   ga4: { propertyId: string; name: string; status: ConnectionStatus } | null;
   store: StoreConnection | null;
-  /** Backfill runs one day at a time per source (see jobs/src/backfill.ts), so status and range are tracked per source, not blended into one client-level field. */
   backfill: Record<BackfillSourceKey, SourceBackfillState>;
 }
 
@@ -149,19 +170,10 @@ export interface AdminUser {
   name: string;
   email: string;
   role: Role;
-  clientId: string | null; // set only for role === "client"
+  clientId: string | null;
   createdAt: string;
   passwordHash: string;
 }
-
-/**
- * PBKDF2 hash (see lib/auth.ts) of the shared demo password "ecomdash-demo".
- * Every seed account below logs in with this password, reusing one
- * precomputed hash for convenience; users created later via the invite
- * form each get their own freshly salted hash from a real password.
- */
-const SEED_PASSWORD_HASH =
-  "30f7020eac5ef97ac66f36beec3ba70c:f2fec39016290b4b8b8108c363238bb5229c2d61a6e21252393e113d97088b49";
 
 function slugify(name: string): string {
   return name
@@ -171,151 +183,152 @@ function slugify(name: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
-const SEED_CLIENTS: AdminClient[] = [
-  {
-    id: "c-1",
-    name: "Acme Outdoors",
-    slug: "acme-outdoors",
-    timezone: "America/Denver",
-    currency: "USD",
-    createdAt: "2026-06-05",
-    google: { customerId: "412-556-7890", name: "Acme Outdoors", status: "connected" },
-    meta: { accountId: "act_10897234561", name: "Acme Outdoors", status: "connected" },
-    ga4: { propertyId: "properties/348219004", name: "Acme Outdoors — Production", status: "connected" },
-    store: { type: "shopify", domain: "acme-outdoors.myshopify.com", status: "connected" },
-    backfill: {
-      google: { status: "complete", range: { start: "2026-03-08", end: "2026-06-05" } },
-      meta: { status: "complete", range: { start: "2026-03-08", end: "2026-06-05" } },
-      ga4: { status: "complete", range: { start: "2026-03-08", end: "2026-06-05" } },
-      store: { status: "complete", range: { start: "2026-03-08", end: "2026-06-05" } },
-    },
-  },
-  {
-    id: "c-2",
-    name: "Northwind Coffee Co.",
-    slug: "northwind-coffee-co",
-    timezone: "America/New_York",
-    currency: "USD",
-    createdAt: "2026-06-18",
-    google: { customerId: "556-223-1147", name: "Northwind Coffee Co.", status: "connected" },
-    meta: { accountId: "act_10897234782", name: "Northwind Coffee Co.", status: "needs_reauth" },
-    ga4: { propertyId: "properties/348219115", name: "Northwind Coffee — Production", status: "connected" },
-    store: {
-      type: "woocommerce",
-      domain: "northwindcoffee.co",
-      includedStatuses: ["completed", "processing"],
-      status: "connected",
-    },
-    backfill: {
-      google: { status: "complete", range: { start: "2026-03-21", end: "2026-06-18" } },
-      meta: { status: "complete", range: { start: "2026-03-21", end: "2026-06-18" } },
-      ga4: { status: "complete", range: { start: "2026-03-21", end: "2026-06-18" } },
-      store: { status: "complete", range: { start: "2026-03-21", end: "2026-06-18" } },
-    },
-  },
-  {
-    id: "c-3",
-    name: "Solstice Skincare",
-    slug: "solstice-skincare",
-    timezone: "America/Los_Angeles",
-    currency: "USD",
-    createdAt: "2026-06-29",
-    google: { customerId: "778-902-3345", name: "Solstice Skincare", status: "connected" },
-    meta: { accountId: "act_10897235014", name: "Solstice Skincare", status: "connected" },
-    ga4: null,
-    store: { type: "shopify", domain: "solstice-skincare.myshopify.com", status: "connected" },
-    backfill: {
-      google: { status: "running", range: { start: "2026-04-01", end: "2026-06-29" } },
-      meta: { status: "running", range: { start: "2026-04-01", end: "2026-06-29" } },
-      ga4: { status: "not_started", range: null },
-      store: { status: "running", range: { start: "2026-04-01", end: "2026-06-29" } },
-    },
-  },
-  {
-    id: "c-4",
-    name: "Harbor & Pine Furniture",
-    slug: "harbor-pine-furniture",
-    timezone: "America/Toronto",
-    currency: "CAD",
-    createdAt: "2026-07-01",
-    google: null,
-    meta: { accountId: "act_10897235339", name: "Harbor & Pine Furniture", status: "connected" },
-    ga4: { propertyId: "properties/348219337", name: "Harbor & Pine — Production", status: "connected" },
-    store: null,
-    backfill: {
-      google: { status: "not_started", range: null },
-      meta: { status: "not_started", range: null },
-      ga4: { status: "not_started", range: null },
-      store: { status: "not_started", range: null },
-    },
-  },
-];
+const connStatus = (status: "active" | "needs_reauth" | "disabled"): ConnectionStatus =>
+  status === "active" ? "connected" : status === "needs_reauth" ? "needs_reauth" : "not_connected";
 
-const SEED_USERS: AdminUser[] = [
-  { id: "u-1", name: "Igor Zvagelsky", email: "i@igor.digital", role: "admin", clientId: null, createdAt: "2026-06-01", passwordHash: SEED_PASSWORD_HASH },
-  { id: "u-2", name: "Dana Whitfield", email: "dana@ecomdash.agency", role: "analyst", clientId: null, createdAt: "2026-06-04", passwordHash: SEED_PASSWORD_HASH },
-  { id: "u-3", name: "Marcus Ide", email: "marcus@ecomdash.agency", role: "analyst", clientId: null, createdAt: "2026-06-10", passwordHash: SEED_PASSWORD_HASH },
-  { id: "u-4", name: "Priya Nandakumar", email: "priya@acmeoutdoors.com", role: "client", clientId: "c-1", createdAt: "2026-06-06", passwordHash: SEED_PASSWORD_HASH },
-  { id: "u-5", name: "Tom Rutherford", email: "tom@northwindcoffee.co", role: "client", clientId: "c-2", createdAt: "2026-06-19", passwordHash: SEED_PASSWORD_HASH },
-];
+async function loadClients(clientIds?: string[]): Promise<AdminClient[]> {
+  const db = getDb();
+  let clientQuery = db.selectFrom("dim_client").selectAll();
+  if (clientIds) clientQuery = clientQuery.where("client_id", "in", clientIds);
+  const clientRows = await clientQuery.orderBy("created_at", "asc").execute();
+  if (clientRows.length === 0) return [];
+  const ids = clientRows.map((c) => c.client_id);
 
-/**
- * Next.js dev (and even prod) can instantiate this module separately for
- * Server Actions vs Server Component rendering ("layers" in the RSC build
- * graph), so a plain module-level array does not reliably persist writes
- * across them. globalThis is the one thing guaranteed to be the same
- * object within a single Node process regardless of module layering; this
- * is the standard workaround (same pattern used for Prisma client
- * singletons in Next.js apps).
- */
-interface Store {
-  clients: AdminClient[];
-  users: AdminUser[];
-  nextClientSeq: number;
-  nextUserSeq: number;
-}
-
-declare global {
-  // eslint-disable-next-line no-var
-  var __ecomdashAdminStore: Store | undefined;
-}
-
-function store(): Store {
-  if (!globalThis.__ecomdashAdminStore) {
-    globalThis.__ecomdashAdminStore = {
-      clients: SEED_CLIENTS.map((c) => ({ ...c })),
-      users: SEED_USERS.map((u) => ({ ...u })),
-      nextClientSeq: 6,
-      nextUserSeq: 6,
-    };
+  const credRows = await db.selectFrom("client_credentials").selectAll().where("client_id", "in", ids).execute();
+  const credsByClient = new Map<string, typeof credRows>();
+  for (const r of credRows) {
+    const list = credsByClient.get(r.client_id) ?? [];
+    list.push(r);
+    credsByClient.set(r.client_id, list);
   }
-  return globalThis.__ecomdashAdminStore;
+
+  const jobRows = await sql<{
+    client_id: string;
+    source: string;
+    min_date: string;
+    max_date: string;
+    any_running: boolean;
+    any_pending: boolean;
+    all_succeeded: boolean;
+  }>`
+    select client_id, source, min(date)::text as min_date, max(date)::text as max_date,
+      bool_or(status = 'running') as any_running,
+      bool_or(status = 'pending') as any_pending,
+      bool_and(status = 'succeeded') as all_succeeded
+    from ingest_jobs
+    where client_id = any(${ids}::uuid[]) and kind = 'backfill'
+    group by client_id, source
+  `.execute(db);
+  const jobsByClient = new Map<string, typeof jobRows.rows>();
+  for (const r of jobRows.rows) {
+    const list = jobsByClient.get(r.client_id) ?? [];
+    list.push(r);
+    jobsByClient.set(r.client_id, list);
+  }
+
+  return clientRows.map((c) => {
+    const creds = credsByClient.get(c.client_id) ?? [];
+    const jobs = jobsByClient.get(c.client_id) ?? [];
+    const findCred = (sources: string[]) => creds.find((cr) => sources.includes(cr.source));
+
+    const googleCred = findCred(["google-ads"]);
+    const metaCred = findCred(["meta"]);
+    const ga4Cred = findCred(["ga4"]);
+    const storeCred = findCred(["shopify", "woo"]);
+
+    const googleConfig = googleCred?.config as { external_id: string; name: string } | undefined;
+    const metaConfig = metaCred?.config as { external_id: string; name: string } | undefined;
+    const ga4Config = ga4Cred?.config as { external_id: string; name: string } | undefined;
+    const storeConfig = storeCred?.config as { domain: string; includedStatuses?: string[] } | undefined;
+
+    const backfill = {} as Record<BackfillSourceKey, SourceBackfillState>;
+    for (const key of BACKFILL_SOURCES) {
+      const ingestSources = CREDENTIAL_SOURCE[key];
+      const job = jobs.find((j) => ingestSources.includes(j.source));
+      if (!job) {
+        backfill[key] = { status: "not_started", range: null };
+      } else {
+        const status: BackfillStatus = job.any_running
+          ? "running"
+          : job.any_pending
+            ? "queued"
+            : job.all_succeeded
+              ? "complete"
+              : "queued";
+        backfill[key] = { status, range: { start: job.min_date, end: job.max_date } };
+      }
+    }
+
+    return {
+      id: c.client_id,
+      name: c.name,
+      slug: c.slug,
+      timezone: c.timezone,
+      currency: c.currency,
+      createdAt: String(c.created_at).slice(0, 10),
+      google: googleCred && googleConfig ? { customerId: googleConfig.external_id, name: googleConfig.name, status: connStatus(googleCred.status) } : null,
+      meta: metaCred && metaConfig ? { accountId: metaConfig.external_id, name: metaConfig.name, status: connStatus(metaCred.status) } : null,
+      ga4: ga4Cred && ga4Config ? { propertyId: ga4Config.external_id, name: ga4Config.name, status: connStatus(ga4Cred.status) } : null,
+      store:
+        storeCred && storeConfig
+          ? {
+              type: storeCred.source === "shopify" ? "shopify" : "woocommerce",
+              domain: storeConfig.domain,
+              includedStatuses: storeConfig.includedStatuses,
+              status: connStatus(storeCred.status),
+            }
+          : null,
+      backfill,
+    };
+  });
 }
 
-export function getClients(): AdminClient[] {
-  return store().clients;
+export async function getClients(): Promise<AdminClient[]> {
+  return loadClients();
 }
-export function getClient(id: string): AdminClient | undefined {
-  return store().clients.find((c) => c.id === id);
+export async function getClient(id: string): Promise<AdminClient | undefined> {
+  if (!id) return undefined;
+  const [client] = await loadClients([id]);
+  return client;
 }
-export function getUsers(): AdminUser[] {
-  return store().users;
+
+export async function getUsers(): Promise<AdminUser[]> {
+  const rows = await getDb().selectFrom("app_users").selectAll().orderBy("created_at", "asc").execute();
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    email: r.email,
+    role: r.role,
+    clientId: r.client_id,
+    createdAt: String(r.created_at).slice(0, 10),
+    passwordHash: r.password_hash,
+  }));
 }
-export function getUser(id: string): AdminUser | undefined {
-  return store().users.find((u) => u.id === id);
+export async function getUser(id: string): Promise<AdminUser | undefined> {
+  if (!id) return undefined;
+  const r = await getDb().selectFrom("app_users").selectAll().where("id", "=", id).executeTakeFirst();
+  if (!r) return undefined;
+  return { id: r.id, name: r.name, email: r.email, role: r.role, clientId: r.client_id, createdAt: String(r.created_at).slice(0, 10), passwordHash: r.password_hash };
 }
-export function findUserByEmail(email: string): AdminUser | undefined {
+export async function findUserByEmail(email: string): Promise<AdminUser | undefined> {
   const normalized = email.trim().toLowerCase();
-  return store().users.find((u) => u.email.toLowerCase() === normalized);
+  const r = await getDb()
+    .selectFrom("app_users")
+    .selectAll()
+    .where(sql<boolean>`lower(email) = ${normalized}`)
+    .executeTakeFirst();
+  if (!r) return undefined;
+  return { id: r.id, name: r.name, email: r.email, role: r.role, clientId: r.client_id, createdAt: String(r.created_at).slice(0, 10), passwordHash: r.password_hash };
 }
 
 /** Accounts already linked to a client, keyed by id, so the wizard can flag them instead of allowing double assignment. */
-export function getAssignedAccountIds(): { google: Set<string>; meta: Set<string>; ga4: Set<string> } {
-  const { clients } = store();
+export async function getAssignedAccountIds(): Promise<{ google: Set<string>; meta: Set<string>; ga4: Set<string> }> {
+  const rows = await getDb().selectFrom("client_credentials").select(["source", "config"]).execute();
+  const idOf = (r: (typeof rows)[number]) => (r.config as { external_id?: string } | null)?.external_id;
   return {
-    google: new Set(clients.map((c) => c.google?.customerId).filter((v): v is string => !!v)),
-    meta: new Set(clients.map((c) => c.meta?.accountId).filter((v): v is string => !!v)),
-    ga4: new Set(clients.map((c) => c.ga4?.propertyId).filter((v): v is string => !!v)),
+    google: new Set(rows.filter((r) => r.source === "google-ads").map(idOf).filter((v): v is string => !!v)),
+    meta: new Set(rows.filter((r) => r.source === "meta").map(idOf).filter((v): v is string => !!v)),
+    ga4: new Set(rows.filter((r) => r.source === "ga4").map(idOf).filter((v): v is string => !!v)),
   };
 }
 
@@ -332,105 +345,107 @@ export interface NewClientInput {
     | null;
 }
 
-export function createClientRecord(input: NewClientInput): AdminClient {
-  const s = store();
-  const google = input.googleCustomerId
-    ? GOOGLE_ACCOUNTS.find((a) => a.customerId === input.googleCustomerId)
-    : undefined;
-  const meta = input.metaAccountId ? META_ACCOUNTS.find((a) => a.accountId === input.metaAccountId) : undefined;
-  const ga4 = input.ga4PropertyId ? GA4_PROPERTIES.find((p) => p.propertyId === input.ga4PropertyId) : undefined;
+export async function createClientRecord(input: NewClientInput): Promise<AdminClient> {
+  const db = getDb();
+  const [googleAccounts, metaAccounts, ga4Properties] = await Promise.all([getGoogleAccounts(), getMetaAccounts(), getGa4Properties()]);
+  const google = input.googleCustomerId ? googleAccounts.find((a) => a.customerId === input.googleCustomerId) : undefined;
+  const meta = input.metaAccountId ? metaAccounts.find((a) => a.accountId === input.metaAccountId) : undefined;
+  const ga4 = input.ga4PropertyId ? ga4Properties.find((p) => p.propertyId === input.ga4PropertyId) : undefined;
 
-  const record: AdminClient = {
-    id: `c-${s.nextClientSeq++}`,
-    name: input.name,
-    slug: slugify(input.name),
-    timezone: input.timezone,
-    currency: input.currency,
-    createdAt: new Date().toISOString().slice(0, 10),
-    google: google ? { customerId: google.customerId, name: google.name, status: "connected" } : null,
-    meta: meta ? { accountId: meta.accountId, name: meta.name, status: "connected" } : null,
-    ga4: ga4 ? { propertyId: ga4.propertyId, name: ga4.name, status: "connected" } : null,
-    store: input.store
-      ? {
-          type: input.store.type,
-          domain: input.store.domain,
-          includedStatuses: input.store.type === "woocommerce" ? input.store.includedStatuses : undefined,
-          status: "connected",
-        }
-      : null,
-    backfill: {
-      google: { status: "not_started", range: null },
-      meta: { status: "not_started", range: null },
-      ga4: { status: "not_started", range: null },
-      store: { status: "not_started", range: null },
-    },
-  };
-  s.clients.push(record);
+  const client = await db
+    .insertInto("dim_client")
+    .values({ name: input.name, slug: slugify(input.name), timezone: input.timezone, currency: input.currency })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+
+  const credentials: { client_id: string; source: "meta" | "google-ads" | "ga4" | "shopify" | "woo"; config: unknown; status: "active" }[] = [];
+  if (google) credentials.push({ client_id: client.client_id, source: "google-ads", config: { external_id: google.customerId, name: google.name }, status: "active" });
+  if (meta) credentials.push({ client_id: client.client_id, source: "meta", config: { external_id: meta.accountId, name: meta.name }, status: "active" });
+  if (ga4) credentials.push({ client_id: client.client_id, source: "ga4", config: { external_id: ga4.propertyId, name: ga4.name }, status: "active" });
+  if (input.store) {
+    credentials.push({
+      client_id: client.client_id,
+      source: input.store.type === "shopify" ? "shopify" : "woo",
+      config: input.store.type === "shopify" ? { domain: input.store.domain } : { domain: input.store.domain, includedStatuses: input.store.includedStatuses },
+      status: "active",
+    });
+  }
+  if (credentials.length > 0) {
+    await db.insertInto("client_credentials").values(credentials).execute();
+  }
+
+  const record = await getClient(client.client_id);
+  if (!record) throw new Error("Failed to load newly created client");
   return record;
 }
 
 /**
  * Queues a backfill for an explicit date range, one or more sources at a
- * time (matches jobs/src/backfill.ts, which runs per source). Each
- * requested source is queued independently; a source already queued or
- * running is skipped rather than failing the whole request, so selecting
- * "Google + GA4" while Meta is mid-run still queues the other two. A
- * source that finished a previous run can be re-queued for a new window.
+ * time: one ingest_jobs row per day per source (matches jobs/src/backfill.ts,
+ * which runs per source, one day at a time). Upserted so re-queuing a
+ * previously completed/failed day resets it to pending. A source already
+ * queued or running is skipped rather than failing the whole request.
  */
-export function startBackfill(
+export async function startBackfill(
   clientId: string,
   sources: BackfillSourceKey[],
   range: { start: string; end: string },
-): { queued: BackfillSourceKey[]; blocked: BackfillSourceKey[] } {
-  const c = store().clients.find((c) => c.id === clientId);
-  if (!c) return { queued: [], blocked: sources };
+): Promise<{ queued: BackfillSourceKey[]; blocked: BackfillSourceKey[] }> {
+  const db = getDb();
+  const client = await getClient(clientId);
+  if (!client) return { queued: [], blocked: sources };
+
   const queued: BackfillSourceKey[] = [];
   const blocked: BackfillSourceKey[] = [];
-  for (const s of sources) {
-    const current = c.backfill[s];
-    if (current.status === "queued" || current.status === "running") {
-      blocked.push(s);
+  for (const key of sources) {
+    const current = client.backfill[key].status;
+    if (current === "queued" || current === "running") {
+      blocked.push(key);
       continue;
     }
-    c.backfill[s] = { status: "queued", range };
-    queued.push(s);
+    const ingestSource =
+      key === "store" ? (client.store?.type === "woocommerce" ? "woo" : "shopify") : SOURCE_TO_INGEST[key];
+    await sql`
+      insert into ingest_jobs (client_id, source, date, kind, status)
+      select ${clientId}::uuid, ${ingestSource}, d, 'backfill', 'pending'
+      from generate_series(${range.start}::date, ${range.end}::date, interval '1 day') d
+      on conflict (client_id, source, date, kind)
+      do update set status = 'pending', attempts = 0, last_error = null, started_at = null, finished_at = null
+    `.execute(db);
+    queued.push(key);
   }
   return { queued, blocked };
 }
 
-export function createUserRecord(input: {
+export async function createUserRecord(input: {
   name: string;
   email: string;
   role: Role;
   clientId: string | null;
   passwordHash: string;
-}): AdminUser {
-  const s = store();
-  const record: AdminUser = {
-    id: `u-${s.nextUserSeq++}`,
-    name: input.name,
-    email: input.email,
-    role: input.role,
-    clientId: input.role === "client" ? input.clientId : null,
-    createdAt: new Date().toISOString().slice(0, 10),
-    passwordHash: input.passwordHash,
-  };
-  s.users.push(record);
-  return record;
+}): Promise<AdminUser> {
+  const r = await getDb()
+    .insertInto("app_users")
+    .values({
+      name: input.name,
+      email: input.email,
+      role: input.role,
+      client_id: input.role === "client" ? input.clientId : null,
+      password_hash: input.passwordHash,
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+  return { id: r.id, name: r.name, email: r.email, role: r.role, clientId: r.client_id, createdAt: String(r.created_at).slice(0, 10), passwordHash: r.password_hash };
 }
 
-export function assignUserClient(userId: string, clientId: string | null): void {
-  const u = store().users.find((u) => u.id === userId);
-  if (u && u.role === "client") u.clientId = clientId;
+export async function assignUserClient(userId: string, clientId: string | null): Promise<void> {
+  await getDb().updateTable("app_users").set({ client_id: clientId }).where("id", "=", userId).where("role", "=", "client").execute();
 }
 
-export function setUserPassword(userId: string, passwordHash: string): void {
-  const u = store().users.find((u) => u.id === userId);
-  if (u) u.passwordHash = passwordHash;
+export async function setUserPassword(userId: string, passwordHash: string): Promise<void> {
+  await getDb().updateTable("app_users").set({ password_hash: passwordHash }).where("id", "=", userId).execute();
 }
 
-export function removeUser(userId: string): void {
-  const s = store();
-  const idx = s.users.findIndex((u) => u.id === userId);
-  if (idx >= 0) s.users.splice(idx, 1);
+export async function removeUser(userId: string): Promise<void> {
+  await getDb().deleteFrom("app_users").where("id", "=", userId).execute();
 }

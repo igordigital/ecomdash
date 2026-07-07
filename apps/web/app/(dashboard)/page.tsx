@@ -25,7 +25,7 @@ import {
   getRollingWindows,
   getSiteFunnel,
   getStoreKpis,
-} from "@/lib/mock";
+} from "@/lib/dashboard-data";
 
 export default async function OverviewPage({
   searchParams,
@@ -38,14 +38,17 @@ export default async function OverviewPage({
   const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
   const clientId = await resolveViewedClientId(sp.clientId);
 
-  const rolling = getRollingWindows(clientId);
-  const kpis = getOverviewKpis(clientId, range);
-  const store = getStoreKpis(clientId, range);
-  const series = getMerSeries(clientId, range);
-  const meta = getNetworkKpis(clientId, "meta", range);
-  const google = getNetworkKpis(clientId, "google", range);
-  const funnel = getSiteFunnel(clientId, range);
-  const topAnomalies = getAnomalies(clientId, range).slice(0, 3);
+  const [rolling, kpis, store, series, meta, google, funnel, anomalies] = await Promise.all([
+    getRollingWindows(clientId),
+    getOverviewKpis(clientId, range),
+    getStoreKpis(clientId, range),
+    getMerSeries(clientId, range),
+    getNetworkKpis(clientId, "meta", range),
+    getNetworkKpis(clientId, "google", range),
+    getSiteFunnel(clientId, range),
+    getAnomalies(clientId, range),
+  ]);
+  const topAnomalies = anomalies.slice(0, 3);
 
   return (
     <>

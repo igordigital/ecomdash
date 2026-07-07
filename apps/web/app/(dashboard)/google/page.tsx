@@ -4,7 +4,7 @@ import { Badge, Card, Funnel, HealthChip, PageHeader, SectionTitle, StatCard } f
 import { fmtNum, fmtNumCompact, fmtPct, fmtRatio, fmtUsd, fmtUsdCompact } from "@/lib/format";
 import { resolveRange, type RangeSearchParams } from "@/lib/range";
 import { resolveViewedClientId } from "@/lib/viewed-client";
-import { getEarliestDate, getGoogleCampaigns, getLatestDate, getNetworkFunnel, getNetworkKpis } from "@/lib/mock";
+import { getEarliestDate, getGoogleCampaigns, getLatestDate, getNetworkFunnel, getNetworkKpis } from "@/lib/dashboard-data";
 
 export default async function GooglePage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
   const sp = await searchParams;
@@ -13,9 +13,12 @@ export default async function GooglePage({ searchParams }: { searchParams: Promi
   const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
   const clientId = await resolveViewedClientId(sp.clientId);
 
-  const { cur, prev, trend, sparkSpend, sparkRoas } = getNetworkKpis(clientId, "google", range);
-  const funnel = getNetworkFunnel(clientId, "google", range);
-  const campaigns = getGoogleCampaigns(clientId, range);
+  const [networkKpis, funnel, campaigns] = await Promise.all([
+    getNetworkKpis(clientId, "google", range),
+    getNetworkFunnel(clientId, "google", range),
+    getGoogleCampaigns(clientId, range),
+  ]);
+  const { cur, prev, trend, sparkSpend, sparkRoas } = networkKpis;
 
   return (
     <>

@@ -10,8 +10,9 @@ import { Badge } from "@/components/ui";
 import { logoutAction } from "@/lib/admin-actions";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth";
 import { getClients, getClient } from "@/lib/admin-store";
-import { DEMO_CLIENT } from "@/lib/mock";
 import "../globals.css";
+
+const FALLBACK_CLIENT_NAME = "Dashboard";
 
 export const metadata: Metadata = {
   title: "ecomdash",
@@ -24,9 +25,11 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const isStaff = session?.role === "admin" || session?.role === "analyst";
   // Only ever fetched/sent for staff sessions: a real Client-role session
   // must never receive other clients' names in the page payload.
-  const previewClients = isStaff ? getClients().map((c) => ({ id: c.id, name: c.name })) : [];
+  const previewClients = isStaff ? (await getClients()).map((c) => ({ id: c.id, name: c.name })) : [];
   const clientName =
-    session?.role === "client" ? (getClient(session.clientId ?? "")?.name ?? DEMO_CLIENT.name) : DEMO_CLIENT.name;
+    session?.role === "client"
+      ? ((await getClient(session.clientId ?? ""))?.name ?? FALLBACK_CLIENT_NAME)
+      : FALLBACK_CLIENT_NAME;
 
   return (
     <html lang="en">

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { FunnelStage, Health, RollingPoint } from "../lib/mock";
+import type { FunnelStage, Health, RollingPoint } from "../lib/dashboard-data";
 import { fmtNumCompact, fmtPct } from "../lib/format";
 
 export function Card({

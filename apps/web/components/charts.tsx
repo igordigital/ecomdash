@@ -14,7 +14,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { MerPoint, TrafficDay } from "../lib/mock";
+import type { MerPoint, TrafficDay } from "../lib/dashboard-data";
 
 const AXIS = { stroke: "#334155", fontSize: 11 } as const;
 const GRID = { stroke: "#1e293b", strokeDasharray: "3 3" } as const;

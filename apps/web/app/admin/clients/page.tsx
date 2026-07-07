@@ -3,8 +3,8 @@ import { AdminPageHeader, BackfillBadge, ConnectionStatusBadge } from "@/compone
 import { Card } from "@/components/ui";
 import { getClientBackfillSummary, getClients } from "@/lib/admin-store";
 
-export default function ClientsPage() {
-  const clients = [...getClients()].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+export default async function ClientsPage() {
+  const clients = [...(await getClients())].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 
   return (
     <>

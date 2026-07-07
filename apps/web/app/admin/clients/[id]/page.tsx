@@ -5,14 +5,14 @@ import { BackfillForm, type BackfillSourceRow } from "@/components/admin/backfil
 import { Card } from "@/components/ui";
 import { getClient, getClientBackfillSummary, getUsers } from "@/lib/admin-store";
 import { addDays } from "@/lib/range";
-import { getLatestDate } from "@/lib/mock";
+import { getLatestDate } from "@/lib/dashboard-data";
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const client = getClient(id);
+  const client = await getClient(id);
   if (!client) notFound();
 
-  const clientUsers = getUsers().filter((u) => u.clientId === client.id);
+  const clientUsers = (await getUsers()).filter((u) => u.clientId === client.id);
 
   const latestDate = getLatestDate();
   const sourceRows: BackfillSourceRow[] = [

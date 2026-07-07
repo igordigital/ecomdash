@@ -58,7 +58,7 @@ export async function createClientAction(
     if (domain) store = { type: "woocommerce", domain, includedStatuses };
   }
 
-  const record = createClientRecord({
+  const record = await createClientRecord({
     name,
     timezone,
     currency,
@@ -86,10 +86,10 @@ export async function inviteUserAction(_prev: InviteUserState, formData: FormDat
   if (!name || !email) return { ok: false, error: "Name and email are required." };
   if (role === "client" && !clientId) return { ok: false, error: "Select which client this user should see." };
   if (password.length < 8) return { ok: false, error: "Temporary password must be at least 8 characters." };
-  if (findUserByEmail(email)) return { ok: false, error: "A user with that email already exists." };
+  if (await findUserByEmail(email)) return { ok: false, error: "A user with that email already exists." };
 
   const passwordHash = await hashPassword(password);
-  createUserRecord({ name, email, role, clientId: role === "client" ? clientId : null, passwordHash });
+  await createUserRecord({ name, email, role, clientId: role === "client" ? clientId : null, passwordHash });
   return { ok: true };
 }
 
@@ -105,18 +105,18 @@ export async function changePasswordAction(
   const userId = String(formData.get("userId") ?? "");
   const password = String(formData.get("password") ?? "");
   if (password.length < 8) return { ok: false, error: "Password must be at least 8 characters." };
-  if (!getUser(userId)) return { ok: false, error: "User not found." };
+  if (!(await getUser(userId))) return { ok: false, error: "User not found." };
 
-  setUserPassword(userId, await hashPassword(password));
+  await setUserPassword(userId, await hashPassword(password));
   return { ok: true };
 }
 
 export async function assignUserClientAction(userId: string, clientId: string): Promise<void> {
-  assignUserClient(userId, clientId || null);
+  await assignUserClient(userId, clientId || null);
 }
 
 export async function removeUserAction(userId: string): Promise<void> {
-  removeUserRecord(userId);
+  await removeUserRecord(userId);
 }
 
 export interface BackfillState {
@@ -135,7 +135,7 @@ export async function startBackfillAction(_prev: BackfillState, formData: FormDa
   if (start > end) return { ok: false, error: "Start date must be before the end date." };
   if (sources.length === 0) return { ok: false, error: "Select at least one source to backfill." };
 
-  const { queued, blocked } = startBackfillRecord(clientId, sources, { start, end });
+  const { queued, blocked } = await startBackfillRecord(clientId, sources, { start, end });
   if (queued.length === 0) {
     return { ok: false, error: "Every selected source already has a backfill in progress." };
   }
@@ -167,7 +167,7 @@ async function performLogin(formData: FormData): Promise<LoginState> {
   const password = String(formData.get("password") ?? "");
   const next = String(formData.get("next") ?? "");
 
-  const user = findUserByEmail(email);
+  const user = await findUserByEmail(email);
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
     return { ok: false, error: "Invalid email or password." };
   }

@@ -11,7 +11,7 @@ import {
   getNetworkFunnel,
   getNetworkKpis,
   getSiteFunnel,
-} from "@/lib/mock";
+} from "@/lib/dashboard-data";
 
 export default async function FunnelPage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
   const sp = await searchParams;
@@ -20,12 +20,14 @@ export default async function FunnelPage({ searchParams }: { searchParams: Promi
   const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
   const clientId = await resolveViewedClientId(sp.clientId);
 
-  const site = getSiteFunnel(clientId, range);
-  const metaFunnel = getNetworkFunnel(clientId, "meta", range);
-  const googleFunnel = getNetworkFunnel(clientId, "google", range);
-  const meta = getNetworkKpis(clientId, "meta", range);
-  const google = getNetworkKpis(clientId, "google", range);
-  const trend = getFunnelTrend(clientId, range);
+  const [site, metaFunnel, googleFunnel, meta, google, trend] = await Promise.all([
+    getSiteFunnel(clientId, range),
+    getNetworkFunnel(clientId, "meta", range),
+    getNetworkFunnel(clientId, "google", range),
+    getNetworkKpis(clientId, "meta", range),
+    getNetworkKpis(clientId, "google", range),
+    getFunnelTrend(clientId, range),
+  ]);
 
   const sessions = site[0]?.value ?? 0;
   const orders = site.at(-1)?.value ?? 0;

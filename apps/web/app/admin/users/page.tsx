@@ -19,8 +19,7 @@ export default async function UsersPage() {
   const session = await verifySession(jar.get(SESSION_COOKIE)?.value);
   const role: StaffRole = session?.role === "admin" ? "admin" : "analyst";
   const staffAllowed = canManageStaff(role);
-  const users = getUsers();
-  const clients = getClients();
+  const [users, clients] = await Promise.all([getUsers(), getClients()]);
 
   return (
     <>

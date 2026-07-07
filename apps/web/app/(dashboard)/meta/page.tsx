@@ -22,7 +22,7 @@ import {
   getNetworkFunnel,
   getNetworkKpis,
   getUtmMatchRate,
-} from "@/lib/mock";
+} from "@/lib/dashboard-data";
 
 const CREATIVE_COLORS: Record<string, string> = {
   "UGC video": "#38bdf8",
@@ -39,12 +39,16 @@ export default async function MetaPage({ searchParams }: { searchParams: Promise
   const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
   const clientId = await resolveViewedClientId(sp.clientId);
 
-  const { cur, prev, trend, sparkSpend, sparkCtr, sparkCpm, sparkRoas } = getNetworkKpis(clientId, "meta", range);
-  const funnel = getNetworkFunnel(clientId, "meta", range);
-  const creatives = getCreativeBreakdown(clientId, range);
-  const campaigns = getCampaignHealth(clientId, range).filter((c) => c.platform === "meta");
-  const ads = getMetaAds(clientId, range);
-  const matchRate = getUtmMatchRate(clientId, range);
+  const [networkKpis, funnel, creatives, allCampaigns, ads, matchRate] = await Promise.all([
+    getNetworkKpis(clientId, "meta", range),
+    getNetworkFunnel(clientId, "meta", range),
+    getCreativeBreakdown(clientId, range),
+    getCampaignHealth(clientId, range),
+    getMetaAds(clientId, range),
+    getUtmMatchRate(clientId, range),
+  ]);
+  const { cur, prev, trend, sparkSpend, sparkCtr, sparkCpm, sparkRoas } = networkKpis;
+  const campaigns = allCampaigns.filter((c) => c.platform === "meta");
 
   return (
     <>

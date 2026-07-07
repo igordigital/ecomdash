@@ -13,7 +13,7 @@ import {
   getLatestDate,
   getTrafficEcommerceSummary,
   getTrafficSeries,
-} from "@/lib/mock";
+} from "@/lib/dashboard-data";
 
 export default async function TrafficPage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
   const sp = await searchParams;
@@ -21,11 +21,13 @@ export default async function TrafficPage({ searchParams }: { searchParams: Prom
   const latestDate = getLatestDate();
   const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
   const clientId = await resolveViewedClientId(sp.clientId);
-  const series = getTrafficSeries(clientId, range);
-  const channels = getChannelSummaries(clientId, range);
-  const campaigns = getCampaignTraffic(clientId, range);
-  const content = getContentTraffic(clientId, range);
-  const ecommerce = getTrafficEcommerceSummary(clientId, range);
+  const [series, channels, campaigns, content, ecommerce] = await Promise.all([
+    getTrafficSeries(clientId, range),
+    getChannelSummaries(clientId, range),
+    getCampaignTraffic(clientId, range),
+    getContentTraffic(clientId, range),
+    getTrafficEcommerceSummary(clientId, range),
+  ]);
 
   return (
     <>

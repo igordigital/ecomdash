@@ -4,7 +4,7 @@ import { Card, Delta, PageHeader, SectionTitle, StatCard, StockChip } from "@/co
 import { fmtNum, fmtPct, fmtUsd, fmtUsdCompact } from "@/lib/format";
 import { resolveRange, type RangeSearchParams } from "@/lib/range";
 import { resolveViewedClientId } from "@/lib/viewed-client";
-import { getEarliestDate, getLatestDate, getStoreKpis, getTopProducts } from "@/lib/mock";
+import { getEarliestDate, getLatestDate, getStoreKpis, getTopProducts } from "@/lib/dashboard-data";
 
 export default async function StorePage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
   const sp = await searchParams;
@@ -12,8 +12,7 @@ export default async function StorePage({ searchParams }: { searchParams: Promis
   const latestDate = getLatestDate();
   const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
   const clientId = await resolveViewedClientId(sp.clientId);
-  const { cur, prev, daily } = getStoreKpis(clientId, range);
-  const products = getTopProducts(clientId, range);
+  const [{ cur, prev, daily }, products] = await Promise.all([getStoreKpis(clientId, range), getTopProducts(clientId, range)]);
 
   return (
     <>

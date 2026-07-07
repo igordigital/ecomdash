@@ -1,16 +1,15 @@
 import Link from "next/link";
 import { AdminPageHeader, BackfillBadge, ConnectionStatusBadge } from "@/components/admin/ui";
 import { Card } from "@/components/ui";
-import { AGENCY_INTEGRATIONS, getClientBackfillSummary, getClients, getUsers } from "@/lib/admin-store";
+import { getAgencyIntegrations, getClientBackfillSummary, getClients, getUsers } from "@/lib/admin-store";
 
 export default async function AdminOverviewPage() {
-  const clients = getClients();
-  const users = getUsers();
+  const [clients, users, integrations] = await Promise.all([getClients(), getUsers(), getAgencyIntegrations()]);
   const staffCount = users.filter((u) => u.role !== "client").length;
   const needsAttention = clients.filter(
     (c) => c.google?.status === "needs_reauth" || c.meta?.status === "needs_reauth" || c.ga4?.status === "needs_reauth",
   );
-  const integrationsConnected = [AGENCY_INTEGRATIONS.google.connected, AGENCY_INTEGRATIONS.meta.connected, AGENCY_INTEGRATIONS.ga4.connected].filter(
+  const integrationsConnected = [integrations.google.connected, integrations.meta.connected, integrations.ga4.connected].filter(
     Boolean,
   ).length;
 

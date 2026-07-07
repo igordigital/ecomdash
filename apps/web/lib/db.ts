@@ -1,5 +1,17 @@
 import { Kysely, PostgresDialect, type Generated, type ColumnType } from "kysely";
-import { Pool } from "pg";
+import { Pool, types } from "pg";
+
+/**
+ * node-postgres returns SQL `date` columns as JS Date objects (parsed at
+ * local-timezone midnight) by default, not the plain 'YYYY-MM-DD' string
+ * every `date: string` column type in this file assumes. Raw sql`` queries
+ * in dashboard-data.ts sidestepped this by explicitly casting to ::text,
+ * but Kysely query-builder calls (e.g. ga4-ingest.ts reading ingest_jobs)
+ * did not, and got a full ISO timestamp where a date string was expected.
+ * OID 1082 is Postgres's `date` type; returning the raw wire string instead
+ * of parsing it fixes every call site at once instead of patching each one.
+ */
+types.setTypeParser(1082, (value) => value);
 
 type Timestamp = ColumnType<Date, Date | string | undefined, Date | string>;
 type Numeric = ColumnType<string, string | number, string | number>;
@@ -153,9 +165,9 @@ export interface FactGa4CampaignTable {
   device: string;
   sessions: Generated<string>;
   engaged_sessions: Generated<string>;
-  engagement_rate: Generated<Numeric>;
-  ga4_conversions: Generated<Numeric>;
-  ga4_revenue: Generated<Numeric>;
+  engagement_rate: Numeric;
+  ga4_conversions: Numeric;
+  ga4_revenue: Numeric;
   loaded_at: Generated<Timestamp>;
 }
 
@@ -167,9 +179,9 @@ export interface FactGa4ContentTable {
   session_ad_content: string;
   sessions: Generated<string>;
   engaged_sessions: Generated<string>;
-  engagement_rate: Generated<Numeric>;
-  ga4_conversions: Generated<Numeric>;
-  ga4_revenue: Generated<Numeric>;
+  engagement_rate: Numeric;
+  ga4_conversions: Numeric;
+  ga4_revenue: Numeric;
   loaded_at: Generated<Timestamp>;
 }
 
@@ -180,9 +192,9 @@ export interface FactGa4TrafficTable {
   source_medium: string;
   sessions: Generated<string>;
   engaged_sessions: Generated<string>;
-  engagement_rate: Generated<Numeric>;
-  avg_session_duration: Generated<Numeric>;
-  bounce_rate: Generated<Numeric>;
+  engagement_rate: Numeric;
+  avg_session_duration: Numeric;
+  bounce_rate: Numeric;
   new_users: Generated<string>;
   total_users: Generated<string>;
   loaded_at: Generated<Timestamp>;

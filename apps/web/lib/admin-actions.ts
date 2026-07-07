@@ -20,6 +20,7 @@ import {
   type ConnectablePlatform,
   type Role,
 } from "./admin-store";
+import { runPendingGa4Jobs } from "./ga4-ingest";
 
 const SOURCE_LABELS: Record<BackfillSourceKey, string> = {
   google: "Google",
@@ -170,6 +171,20 @@ export async function deleteClientAction(clientId: string): Promise<void> {
 
 export async function connectClientAccountAction(clientId: string, platform: ConnectablePlatform, externalId: string): Promise<void> {
   await connectClientAccount(clientId, platform, externalId);
+}
+
+/**
+ * Fire-and-forget: does not await the job loop, since a multi-day backfill
+ * would otherwise hold the request open for minutes. Safe on Railway's
+ * persistent Node process (unlike a serverless function, nothing kills
+ * in-flight work once the response is sent); the .catch keeps a failure
+ * from becoming an unhandled rejection that could crash the whole server.
+ */
+export async function runGa4NowAction(clientId: string): Promise<{ ok: true }> {
+  void runPendingGa4Jobs(clientId).catch((err) => {
+    console.error("GA4 job run failed for client", clientId, err);
+  });
+  return { ok: true };
 }
 
 export async function redirectToClient(clientId: string): Promise<void> {

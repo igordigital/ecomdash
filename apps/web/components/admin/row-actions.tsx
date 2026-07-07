@@ -8,6 +8,7 @@ import {
   connectClientAccountAction,
   deleteClientAction,
   removeUserAction,
+  runGa4NowAction,
   unarchiveClientAction,
 } from "@/lib/admin-actions";
 import { ConnectionStatusBadge } from "@/components/admin/ui";
@@ -242,6 +243,38 @@ export function ConnectAccountControl({
           Cancel
         </button>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Processes pending GA4 ingest_jobs for this client right now, in place of
+ * a real always-on worker (see lib/ga4-ingest.ts). Fire-and-forget on the
+ * server side, so this button returns immediately; there's no live
+ * progress feed yet, so it just tells you to check back.
+ */
+export function RunGa4NowButton({ clientId, disabled }: { clientId: string; disabled?: boolean }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [started, setStarted] = useState(false);
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        disabled={disabled || pending}
+        onClick={() =>
+          startTransition(async () => {
+            await runGa4NowAction(clientId);
+            setStarted(true);
+            router.refresh();
+          })
+        }
+        className="rounded border border-slate-700 px-2.5 py-1 text-xs font-medium text-slate-300 hover:border-slate-600 disabled:opacity-50"
+      >
+        Run GA4 now
+      </button>
+      {started ? <span className="text-xs text-slate-500">Started — reload in a bit to see progress.</span> : null}
     </div>
   );
 }

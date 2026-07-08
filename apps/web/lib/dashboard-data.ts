@@ -260,6 +260,68 @@ export async function getRollingWindows(clientId: string): Promise<RollingWindow
   };
 }
 
+function monthInfo(dateKey: string): { monthStart: string; daysInMonth: number; dayOfMonth: number } {
+  const [year, month, day] = dateKey.split("-").map(Number) as [number, number, number];
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return { monthStart: `${year}-${String(month).padStart(2, "0")}-01`, daysInMonth, dayOfMonth: day };
+}
+
+export interface RunRateStat {
+  monthToDateSpend: number;
+  projectedSpend: number;
+  lastMonthSpend: number;
+  dayOfMonth: number;
+  daysInMonth: number;
+}
+
+export interface RunRate {
+  meta: RunRateStat;
+  google: RunRateStat;
+}
+
+/**
+ * "Current month" is anchored to the client's own latest complete day, not
+ * the literal system clock date: if today is the 1st and nothing from the
+ * new month has landed yet, basing this on latestDate (still the last day
+ * of the prior month at that point) avoids ever showing an empty "day 1 of
+ * 31" the instant the calendar flips before any data exists for it.
+ */
+export async function getRunRate(clientId: string): Promise<RunRate> {
+  const timezone = await getClientTimezone(clientId);
+  const latestDate = getLatestDate(timezone);
+  const { monthStart, daysInMonth, dayOfMonth } = monthInfo(latestDate);
+  const prevMonthEnd = addDays(monthStart, -1);
+  const { monthStart: prevMonthStart } = monthInfo(prevMonthEnd);
+
+  const [thisMonth, lastMonth] = await Promise.all([
+    fetchDailyFacts(clientId, monthStart, latestDate),
+    fetchDailyFacts(clientId, prevMonthStart, prevMonthEnd),
+  ]);
+
+  const sumBy = (days: DailyFact[], pick: (d: DailyFact) => number) => r2(days.reduce((s, d) => s + pick(d), 0));
+  const project = (monthToDate: number) => (dayOfMonth > 0 ? r2((monthToDate / dayOfMonth) * daysInMonth) : 0);
+
+  const metaMtd = sumBy(thisMonth, (d) => d.metaSpend);
+  const googleMtd = sumBy(thisMonth, (d) => d.googleSpend);
+
+  return {
+    meta: {
+      monthToDateSpend: metaMtd,
+      projectedSpend: project(metaMtd),
+      lastMonthSpend: sumBy(lastMonth, (d) => d.metaSpend),
+      dayOfMonth,
+      daysInMonth,
+    },
+    google: {
+      monthToDateSpend: googleMtd,
+      projectedSpend: project(googleMtd),
+      lastMonthSpend: sumBy(lastMonth, (d) => d.googleSpend),
+      dayOfMonth,
+      daysInMonth,
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Network daily series (fact_ad_daily rollups per platform)
 // ---------------------------------------------------------------------------

@@ -133,6 +133,46 @@ export function StatCard({
 }
 
 /**
+ * Month-to-date spend projected to a full-month total at current pace
+ * (monthToDateSpend / dayOfMonth * daysInMonth), so an account manager knows
+ * roughly what a client will be billed for by month end without waiting for
+ * the month to actually finish. Always anchored to the calendar month, not
+ * the page's range selector, same as MultiWindowStat below.
+ */
+export function RunRateCard({
+  label,
+  color,
+  stat,
+  fmt,
+}: {
+  label: string;
+  color: string;
+  stat: { monthToDateSpend: number; projectedSpend: number; lastMonthSpend: number; dayOfMonth: number; daysInMonth: number };
+  fmt: (n: number) => string;
+}) {
+  const pct = stat.daysInMonth > 0 ? Math.min(1, stat.dayOfMonth / stat.daysInMonth) : 0;
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</p>
+        <span className="text-[11px] tabular-nums text-slate-600">
+          Day {stat.dayOfMonth} of {stat.daysInMonth}
+        </span>
+      </div>
+      <p className="mt-1 text-2xl font-bold tabular-nums text-slate-100">{fmt(stat.projectedSpend)}</p>
+      <div className="mt-0.5 flex items-center gap-1.5">
+        <Delta current={stat.projectedSpend} previous={stat.lastMonthSpend} />
+        <span className="text-[11px] text-slate-600">projected vs last month</span>
+      </div>
+      <div className="mt-3 h-1.5 w-full overflow-hidden rounded bg-slate-800">
+        <div className="h-full rounded" style={{ width: `${pct * 100}%`, backgroundColor: color }} />
+      </div>
+      <p className="mt-1.5 text-xs text-slate-500">{fmt(stat.monthToDateSpend)} spent so far this month</p>
+    </div>
+  );
+}
+
+/**
  * Always-visible 1D / 7D / 30D snapshot for a north-star metric, independent
  * of the page's range selector. Anchored to the latest complete day.
  */

@@ -7,6 +7,7 @@ import {
   Funnel,
   MultiWindowStat,
   PageHeader,
+  RunRateCard,
   SectionTitle,
   ShareBar,
   StatCard,
@@ -25,6 +26,7 @@ import {
   getNetworkKpis,
   getOverviewKpis,
   getRollingWindows,
+  getRunRate,
   getSiteFunnel,
   getStoreKpis,
 } from "@/lib/dashboard-data";
@@ -41,8 +43,9 @@ export default async function OverviewPage({
   const latestDate = getLatestDate(timezone);
   const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
 
-  const [rolling, kpis, store, series, meta, google, funnel, anomalies, currency] = await Promise.all([
+  const [rolling, runRate, kpis, store, series, meta, google, funnel, anomalies, currency] = await Promise.all([
     getRollingWindows(clientId),
+    getRunRate(clientId),
     getOverviewKpis(clientId, range),
     getStoreKpis(clientId, range),
     getMerSeries(clientId, range),
@@ -77,6 +80,14 @@ export default async function OverviewPage({
           sparkColor="#f59e0b"
         />
         <MultiWindowStat label="Orders" points={rolling.orders} spark={rolling.ordersSpark} format={fmtNum} sparkColor="#34d399" />
+      </div>
+
+      <SectionTitle hint="Month-to-date spend projected to a full month at current pace. Always anchored to the calendar month, independent of the range selector above.">
+        Run rate
+      </SectionTitle>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <RunRateCard label="Meta" color="#38bdf8" stat={runRate.meta} fmt={fmtUsdCompact} />
+        <RunRateCard label="Google Ads" color="#34d399" stat={runRate.google} fmt={fmtUsdCompact} />
       </div>
 
       <SectionTitle hint={`${range.label}, ${range.compareLabel}. Set by the range selector above.`}>

@@ -57,13 +57,13 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     },
   ];
 
+  // Once a source has any history on file, default to just the latest complete day: re-submitting
+  // "Start backfill" with its pre-filled dates should top up yesterday, not silently reset and
+  // re-run the entire range on file every time. A real historical re-backfill still just needs the
+  // date fields widened by hand. A brand-new client with nothing on file gets a real starter range.
   const rangesOnFile = sourceRows.map((s) => s.range).filter((r): r is { start: string; end: string } => r !== null);
-  const defaultStart =
-    rangesOnFile.length > 0
-      ? rangesOnFile.reduce((min, r) => (r.start < min ? r.start : min), rangesOnFile[0]!.start)
-      : addDays(latestDate, -89);
-  const defaultEnd =
-    rangesOnFile.length > 0 ? rangesOnFile.reduce((max, r) => (r.end > max ? r.end : max), rangesOnFile[0]!.end) : latestDate;
+  const defaultStart = rangesOnFile.length > 0 ? latestDate : addDays(latestDate, -89);
+  const defaultEnd = latestDate;
 
   return (
     <>

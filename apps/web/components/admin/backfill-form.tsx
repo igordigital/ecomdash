@@ -39,7 +39,10 @@ export function BackfillForm({
     if (state.ok) router.refresh();
   }, [state, router]);
 
-  const anySelectable = sources.some((s) => s.connected && s.status !== "running");
+  // Gated only on whether a source is connected at all -- backfill status (queued/running/etc)
+  // is informational, not a submission gate. startBackfillAction always accepts and immediately
+  // runs a new request regardless of what else is in flight for that source (see its docstring).
+  const anySelectable = sources.some((s) => s.connected);
 
   return (
     <form action={formAction} className="grid gap-4">
@@ -47,7 +50,7 @@ export function BackfillForm({
 
       <div className="grid gap-2">
         {sources.map((s) => {
-          const selectable = s.connected && s.status !== "running";
+          const selectable = s.connected;
           return (
             <label
               key={s.key}

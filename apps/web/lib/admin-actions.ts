@@ -150,12 +150,17 @@ export interface BackfillState {
 }
 
 /**
- * Queues the selected sources, then immediately fires the real processors
- * (same fire-and-forget pattern as the individual "Run X now" buttons) for
- * anything that just got queued or was already queued but never ran — the
- * old version only ever queued, so a source could sit "queued" forever
- * unless someone separately clicked "Run X now". Only a source that's
- * actively "running" right now is skipped, to avoid double-processing.
+ * Queues the requested date range for every selected source and immediately
+ * fires the real processors (same fire-and-forget pattern as the individual
+ * "Run X now" buttons) -- unconditionally, every time. Does not check
+ * whether that source has other work already in flight before deciding
+ * whether to act: an earlier version did, and that meant a brand-new
+ * single-day request silently did nothing whenever a bigger historical
+ * backfill for the same source hadn't finished yet (the date was never
+ * even queued, since the code assumed "already queued" from the unrelated
+ * older range meant there was nothing new to do). startBackfillRecord's
+ * upsert is scoped per-day, so requesting overlapping or brand-new dates
+ * while other days are mid-flight is always safe.
  */
 export async function startBackfillAction(_prev: BackfillState, formData: FormData): Promise<BackfillState> {
   const clientId = String(formData.get("clientId") ?? "");
@@ -167,13 +172,9 @@ export async function startBackfillAction(_prev: BackfillState, formData: FormDa
   if (start > end) return { ok: false, error: "Start date must be before the end date." };
   if (sources.length === 0) return { ok: false, error: "Select at least one source to backfill." };
 
-  const { queued, alreadyQueued, running, storeType } = await startBackfillRecord(clientId, sources, { start, end });
-  const runnable = [...queued, ...alreadyQueued];
-  if (runnable.length === 0) {
-    return { ok: false, error: "Every selected source already has a backfill running." };
-  }
+  const { requested, storeType } = await startBackfillRecord(clientId, sources, { start, end });
 
-  for (const key of runnable) {
+  for (const key of requested) {
     if (key === "ga4") {
       void runPendingGa4Jobs(clientId).catch((err) => console.error("GA4 job run failed for client", clientId, err));
     } else if (key === "meta") {
@@ -184,14 +185,7 @@ export async function startBackfillAction(_prev: BackfillState, formData: FormDa
     // "google", and "store" when storeType is "shopify" or null: no real processor yet, rows stay queued only.
   }
 
-  const startedLabel = runnable.map((s) => SOURCE_LABELS[s]).join(", ");
-  if (running.length > 0) {
-    return {
-      ok: true,
-      message: `Queued and started: ${startedLabel}. Skipped ${running.map((s) => SOURCE_LABELS[s]).join(", ")} (already running).`,
-    };
-  }
-  return { ok: true, message: `Queued and started: ${startedLabel}.` };
+  return { ok: true, message: `Queued and started: ${requested.map((s) => SOURCE_LABELS[s]).join(", ")}.` };
 }
 
 export async function archiveClientAction(clientId: string): Promise<void> {

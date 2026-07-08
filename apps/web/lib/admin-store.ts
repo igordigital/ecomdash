@@ -569,37 +569,33 @@ export async function deleteClient(clientId: string): Promise<void> {
 /**
  * Queues a backfill for an explicit date range, one or more sources at a
  * time: one ingest_jobs row per day per source (matches jobs/src/backfill.ts,
- * which runs per source, one day at a time). Upserted so re-queuing a
- * previously completed/failed day resets it to pending.
+ * which runs per source, one day at a time). Upserted so re-requesting a
+ * previously completed/failed/pending day resets it to pending.
  *
- * A source already "running" is left alone entirely (an existing run must
- * never be double-fired). A source already "queued" (rows pending, nothing
- * actively processing them) is NOT re-inserted, but is still reported back
- * in alreadyQueued so the caller can trigger a run for it — this is what
- * lets "Start backfill" self-heal a source that got queued but never ran.
+ * Deliberately does NOT gate on the source's aggregate backfill status.
+ * Gating on it used to mean: if a big historical backfill was still
+ * mid-flight for a source, a brand-new single-day request for that same
+ * source (e.g. "just top up yesterday") got silently swallowed -- the
+ * aggregate status read "already queued", so the new date was never even
+ * inserted, and the caller had no way to tell the difference between "your
+ * request is in the queue" and "your request never got queued". The one
+ * thing still protected is a specific day that is this exact instant being
+ * written to by an in-flight job (`where ingest_jobs.status != 'running'`
+ * on the conflict), so a concurrent request can never stomp on an
+ * in-progress write -- every other day in the requested range, regardless
+ * of any other day's status for that source, is always accepted immediately.
  */
 export async function startBackfill(
   clientId: string,
   sources: BackfillSourceKey[],
   range: { start: string; end: string },
-): Promise<{ queued: BackfillSourceKey[]; alreadyQueued: BackfillSourceKey[]; running: BackfillSourceKey[]; storeType: "shopify" | "woocommerce" | null }> {
+): Promise<{ requested: BackfillSourceKey[]; storeType: "shopify" | "woocommerce" | null }> {
   const db = getDb();
   const client = await getClient(clientId);
-  if (!client || client.status === "archived") return { queued: [], alreadyQueued: [], running: sources, storeType: null };
+  if (!client || client.status === "archived") return { requested: [], storeType: null };
 
-  const queued: BackfillSourceKey[] = [];
-  const alreadyQueued: BackfillSourceKey[] = [];
-  const running: BackfillSourceKey[] = [];
+  const requested: BackfillSourceKey[] = [];
   for (const key of sources) {
-    const current = client.backfill[key].status;
-    if (current === "running") {
-      running.push(key);
-      continue;
-    }
-    if (current === "queued") {
-      alreadyQueued.push(key);
-      continue;
-    }
     const ingestSource =
       key === "store" ? (client.store?.type === "woocommerce" ? "woo" : "shopify") : SOURCE_TO_INGEST[key];
     await sql`
@@ -608,10 +604,11 @@ export async function startBackfill(
       from generate_series(${range.start}::date, ${range.end}::date, interval '1 day') d
       on conflict (client_id, source, date, kind)
       do update set status = 'pending', attempts = 0, last_error = null, started_at = null, finished_at = null
+      where ingest_jobs.status != 'running'
     `.execute(db);
-    queued.push(key);
+    requested.push(key);
   }
-  return { queued, alreadyQueued, running, storeType: client.store?.type ?? null };
+  return { requested, storeType: client.store?.type ?? null };
 }
 
 export async function createUserRecord(input: {

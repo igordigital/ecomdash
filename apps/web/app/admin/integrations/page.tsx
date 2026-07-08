@@ -10,6 +10,12 @@ const GA4_ERROR_LABELS: Record<string, string> = {
   exchange_failed: "Something went wrong talking to Google. Check the server logs.",
 };
 
+const GOOGLE_ADS_ERROR_LABELS: Record<string, string> = {
+  access_denied: "Google sign-in was cancelled.",
+  invalid_state: "That link expired. Try connecting again.",
+  no_refresh_token: "Google didn't return a long-lived token. Try again; consent should prompt fresh.",
+};
+
 const META_ERROR_LABELS: Record<string, string> = {
   access_denied: "Meta sign-in was cancelled.",
   invalid_state: "That link expired. Try connecting again.",
@@ -21,7 +27,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 export default async function IntegrationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ga4?: string; ga4_message?: string; meta?: string; meta_message?: string }>;
+  searchParams: Promise<{ ga4?: string; ga4_message?: string; meta?: string; meta_message?: string; google?: string; google_message?: string }>;
 }) {
   const sp = await searchParams;
   const [integrations, googleAccounts, metaAccounts, ga4Properties] = await Promise.all([
@@ -33,6 +39,8 @@ export default async function IntegrationsPage({
   const { google, meta, ga4 } = integrations;
   const metaDaysLeft = meta.expiresAt ? Math.ceil((new Date(meta.expiresAt).getTime() - Date.now()) / MS_PER_DAY) : null;
   const metaExpiringSoon = metaDaysLeft !== null && metaDaysLeft <= 14;
+  const mccId = process.env.GOOGLE_ADS_MCC_ID ?? "";
+  const developerTokenConfigured = Boolean(process.env.GOOGLE_ADS_DEVELOPER_TOKEN);
 
   return (
     <>
@@ -40,6 +48,16 @@ export default async function IntegrationsPage({
         title="Integrations"
         description="Authorize each platform once, at the agency level. New clients then pick from the accounts and properties already visible here, instead of going through OAuth per client."
       />
+
+      {sp.google === "connected" ? (
+        <div className="mb-4 rounded border border-emerald-900/60 bg-emerald-950/20 p-3 text-xs text-emerald-300">
+          Google Ads connected. Accounts below are refreshed from your MCC.
+        </div>
+      ) : sp.google === "error" ? (
+        <div className="mb-4 rounded border border-red-900/60 bg-red-950/20 p-3 text-xs text-red-300">
+          Couldn&apos;t connect Google Ads: {GOOGLE_ADS_ERROR_LABELS[sp.google_message ?? ""] ?? sp.google_message ?? "unknown error"}
+        </div>
+      ) : null}
 
       {sp.ga4 === "connected" ? (
         <div className="mb-4 rounded border border-emerald-900/60 bg-emerald-950/20 p-3 text-xs text-emerald-300">
@@ -77,14 +95,18 @@ export default async function IntegrationsPage({
           <dl className="mt-3 grid gap-1.5 text-xs text-slate-400">
             <div className="flex justify-between">
               <dt>MCC</dt>
-              <dd className="tabular-nums text-slate-300">{google.mccId}</dd>
+              <dd className="tabular-nums text-slate-300">{mccId || "not set"}</dd>
             </div>
             <div className="flex justify-between">
               <dt>Developer token</dt>
               <dd>
-                <Badge tone={google.developerTokenStatus === "approved" ? "good" : "warn"}>
-                  {google.developerTokenStatus === "approved" ? "Approved" : "Pending"}
-                </Badge>
+                <Badge tone={developerTokenConfigured ? "good" : "warn"}>{developerTokenConfigured ? "Configured" : "Missing"}</Badge>
+              </dd>
+            </div>
+            <div className="flex justify-between">
+              <dt>Connected as</dt>
+              <dd className="max-w-[160px] truncate text-slate-300" title={google.connectedEmail}>
+                {google.connectedEmail || "—"}
               </dd>
             </div>
             <div className="flex justify-between">
@@ -93,12 +115,16 @@ export default async function IntegrationsPage({
             </div>
           </dl>
           <p className="mt-3 text-[11px] text-slate-600">
-            OAuth2 refresh token under the agency MCC. Real-world caveat: Basic API access is applied for once and
-            takes days to weeks for Google to approve before any client pull works.
+            OAuth sign-in under the agency MCC, plus a static developer token (Railway env var, applied for once via
+            the MCC&apos;s API Center — Basic access takes Google days to weeks to approve before any client pull
+            works).
           </p>
-          <button className="mt-3 w-full rounded border border-slate-700 py-1.5 text-xs font-medium text-slate-300 hover:border-slate-600">
-            Reauthorize
-          </button>
+          <Link
+            href="/api/admin/integrations/google-ads/authorize"
+            className="mt-3 block w-full rounded border border-slate-700 py-1.5 text-center text-xs font-medium text-slate-300 hover:border-slate-600"
+          >
+            {google.connected ? "Reconnect" : "Connect Google Ads"}
+          </Link>
           <div className="mt-4 border-t border-slate-800 pt-3">
             <p className="mb-1.5 text-xs font-medium text-slate-500">Visible accounts ({googleAccounts.length})</p>
             <ul className="grid gap-1 text-xs text-slate-400">

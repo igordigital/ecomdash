@@ -24,6 +24,7 @@ import {
 import { runPendingGa4Jobs } from "./ga4-ingest";
 import { runPendingMetaJobs } from "./meta-ingest";
 import { runPendingWooJobs } from "./woo-ingest";
+import { runPendingGoogleAdsJobs } from "./google-ads-ingest";
 import { normalizeWooSiteUrl, testWooConnection } from "./woo-api";
 
 const SOURCE_LABELS: Record<BackfillSourceKey, string> = {
@@ -179,10 +180,12 @@ export async function startBackfillAction(_prev: BackfillState, formData: FormDa
       void runPendingGa4Jobs(clientId).catch((err) => console.error("GA4 job run failed for client", clientId, err));
     } else if (key === "meta") {
       void runPendingMetaJobs(clientId).catch((err) => console.error("Meta job run failed for client", clientId, err));
+    } else if (key === "google") {
+      void runPendingGoogleAdsJobs(clientId).catch((err) => console.error("Google Ads job run failed for client", clientId, err));
     } else if (key === "store" && storeType === "woocommerce") {
       void runPendingWooJobs(clientId).catch((err) => console.error("WooCommerce job run failed for client", clientId, err));
     }
-    // "google", and "store" when storeType is "shopify" or null: no real processor yet, rows stay queued only.
+    // "store" when storeType is "shopify" or null: no real processor yet, rows stay queued only.
   }
 
   return { ok: true, message: `Queued and started: ${requested.map((s) => SOURCE_LABELS[s]).join(", ")}.` };
@@ -215,6 +218,14 @@ export async function connectClientAccountAction(clientId: string, platform: Con
 export async function runGa4NowAction(clientId: string): Promise<{ ok: true }> {
   void runPendingGa4Jobs(clientId).catch((err) => {
     console.error("GA4 job run failed for client", clientId, err);
+  });
+  return { ok: true };
+}
+
+/** Same fire-and-forget shape as runGa4NowAction. */
+export async function runGoogleAdsNowAction(clientId: string): Promise<{ ok: true }> {
+  void runPendingGoogleAdsJobs(clientId).catch((err) => {
+    console.error("Google Ads job run failed for client", clientId, err);
   });
   return { ok: true };
 }

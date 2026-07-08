@@ -35,8 +35,7 @@ export interface Ga4Property {
 
 export interface GoogleIntegration {
   connected: boolean;
-  mccId: string;
-  developerTokenStatus: "approved" | "pending";
+  connectedEmail: string;
   connectedAt: string | null;
 }
 export interface MetaIntegration {
@@ -69,15 +68,14 @@ export async function getAgencyIntegrations(): Promise<AgencyIntegrations> {
   const g = byPlatform.get("google");
   const m = byPlatform.get("meta");
   const a = byPlatform.get("ga4");
-  const googleRef = (g?.external_ref as { mccId?: string; developerTokenStatus?: "approved" | "pending" }) ?? {};
+  const googleRef = (g?.external_ref as { connectedEmail?: string }) ?? {};
   const metaRef = (m?.external_ref as { connectedName?: string; expiresAt?: string }) ?? {};
   const ga4Ref = (a?.external_ref as { connectedEmail?: string }) ?? {};
   return {
     google: {
       connected: g?.connected ?? false,
       connectedAt: g?.connected_at ? String(g.connected_at).slice(0, 10) : null,
-      mccId: googleRef.mccId ?? "",
-      developerTokenStatus: googleRef.developerTokenStatus ?? "pending",
+      connectedEmail: googleRef.connectedEmail ?? "",
     },
     meta: {
       connected: m?.connected ?? false,
@@ -132,6 +130,51 @@ export async function replaceGa4Properties(properties: { propertyId: string; nam
   await db
     .insertInto("agency_ad_accounts")
     .values(properties.map((p) => ({ platform: "ga4" as const, external_id: p.propertyId, name: p.name, domain: p.domain, currency: null })))
+    .execute();
+}
+
+/**
+ * Persists the OAuth result for the agency-level Google Ads connection. The
+ * refresh token lives only in this row's external_ref and is read back only
+ * by getGoogleAdsRefreshToken (used by the connector, never by a page). The
+ * developer token and MCC id are NOT stored here -- they're static
+ * credentials read directly from Railway env vars (GOOGLE_ADS_DEVELOPER_TOKEN,
+ * GOOGLE_ADS_MCC_ID), not something OAuth grants.
+ */
+export async function saveGoogleAdsConnection(input: { connectedEmail: string; refreshToken: string; scope: string }): Promise<void> {
+  await getDb()
+    .insertInto("agency_integrations")
+    .values({
+      platform: "google",
+      connected: true,
+      connected_at: new Date(),
+      external_ref: { connectedEmail: input.connectedEmail, refreshToken: input.refreshToken, scope: input.scope },
+    })
+    .onConflict((oc) =>
+      oc.column("platform").doUpdateSet({
+        connected: true,
+        connected_at: new Date(),
+        external_ref: { connectedEmail: input.connectedEmail, refreshToken: input.refreshToken, scope: input.scope },
+      }),
+    )
+    .execute();
+}
+
+/** Internal-only: the connector needs this to mint access tokens. Never call from a page component. */
+export async function getGoogleAdsRefreshToken(): Promise<string | null> {
+  const row = await getDb().selectFrom("agency_integrations").select("external_ref").where("platform", "=", "google").executeTakeFirst();
+  const ref = row?.external_ref as { refreshToken?: string } | undefined;
+  return ref?.refreshToken ?? null;
+}
+
+/** Replaces the full Google Ads account list with whatever the newly-connected MCC's direct clients currently are. */
+export async function replaceGoogleAdsAccounts(accounts: { customerId: string; name: string; currency: string }[]): Promise<void> {
+  const db = getDb();
+  await db.deleteFrom("agency_ad_accounts").where("platform", "=", "google").execute();
+  if (accounts.length === 0) return;
+  await db
+    .insertInto("agency_ad_accounts")
+    .values(accounts.map((a) => ({ platform: "google" as const, external_id: a.customerId, name: a.name, currency: a.currency, domain: null })))
     .execute();
 }
 

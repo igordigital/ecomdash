@@ -171,12 +171,13 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
               <div className="mt-3 flex items-center justify-between gap-4">
                 <p className="text-xs text-slate-500">
                   Queuing writes day-grain rows to ingest_jobs, tracked per (client, source, date) so it&apos;s
-                  resumable. GA4, Meta, and WooCommerce have real processors (buttons on the right); Google Ads and
-                  Shopify queue but won&apos;t move until those connectors are built.
+                  resumable. GA4, Meta, Google Ads, and WooCommerce have real processors (buttons on the right);
+                  Shopify queues but won&apos;t move until that connector is built.
                 </p>
                 <div className="flex shrink-0 flex-col items-end gap-2">
                   <RunSourceNowButton clientId={client.id} source="ga4" label="Run GA4 now" disabled={!client.ga4} />
                   <RunSourceNowButton clientId={client.id} source="meta" label="Run Meta now" disabled={!client.meta} />
+                  <RunSourceNowButton clientId={client.id} source="google" label="Run Google Ads now" disabled={!client.google} />
                   <RunSourceNowButton
                     clientId={client.id}
                     source="woo"

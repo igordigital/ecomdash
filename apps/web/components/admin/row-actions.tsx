@@ -9,6 +9,7 @@ import {
   deleteClientAction,
   removeUserAction,
   runGa4NowAction,
+  runGoogleAdsNowAction,
   runMetaNowAction,
   runWooNowAction,
   saveWooConnectionAction,
@@ -256,6 +257,7 @@ const RUN_NOW_ACTIONS = {
   ga4: runGa4NowAction,
   meta: runMetaNowAction,
   woo: runWooNowAction,
+  google: runGoogleAdsNowAction,
 } as const;
 
 /**

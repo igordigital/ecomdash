@@ -240,13 +240,15 @@ export async function runPendingWooJobs(clientId: string): Promise<WooJobResult[
 
   await reclaimStaleRunningJobs(clientId, "woo");
 
+  // Newest first: the days someone is actually looking at (recent) land before deep history,
+  // instead of a multi-month backfill delaying "yesterday" until everything before it is done.
   const jobs = await db
     .selectFrom("ingest_jobs")
     .selectAll()
     .where("client_id", "=", clientId)
     .where("source", "=", "woo")
     .where("status", "=", "pending")
-    .orderBy("date", "asc")
+    .orderBy("date", "desc")
     .execute();
 
   if (jobs.length > 0) {

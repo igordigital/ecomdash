@@ -152,13 +152,15 @@ export async function runPendingGa4Jobs(clientId: string): Promise<Ga4JobResult[
 
   await reclaimStaleRunningJobs(clientId, "ga4");
 
+  // Newest first: the days someone is actually looking at (recent) land before deep history,
+  // instead of a multi-month backfill delaying "yesterday" until everything before it is done.
   const jobs = await db
     .selectFrom("ingest_jobs")
     .selectAll()
     .where("client_id", "=", clientId)
     .where("source", "=", "ga4")
     .where("status", "=", "pending")
-    .orderBy("date", "asc")
+    .orderBy("date", "desc")
     .execute();
 
   const results: Ga4JobResult[] = [];

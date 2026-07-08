@@ -13,11 +13,12 @@ export function ClientStatusBadge({ status }: { status: ClientLifecycleStatus })
   return <Badge tone="good">Active</Badge>;
 }
 
-const BACKFILL_META: Record<BackfillStatus, { label: string; tone: "neutral" | "info" | "warn" | "good" }> = {
+const BACKFILL_META: Record<BackfillStatus, { label: string; tone: "neutral" | "info" | "warn" | "good" | "bad" }> = {
   not_started: { label: "Not started", tone: "neutral" },
   queued: { label: "Queued", tone: "info" },
   running: { label: "Backfilling", tone: "warn" },
   complete: { label: "Backfill complete", tone: "good" },
+  failed: { label: "Needs attention", tone: "bad" },
 };
 
 export function BackfillBadge({ status }: { status: BackfillStatus }) {

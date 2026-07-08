@@ -3,14 +3,15 @@ import { Badge, Card, HealthChip, PageHeader, PlatformDot } from "@/components/u
 import { fmtNumCompact, fmtPct, fmtRatio, makeCurrencyFormatters } from "@/lib/format";
 import { resolveRange, type RangeSearchParams } from "@/lib/range";
 import { resolveViewedClientId } from "@/lib/viewed-client";
-import { getCampaignHealth, getClientCurrency, getEarliestDate, getLatestDate, getUtmMatchRate } from "@/lib/dashboard-data";
+import { getCampaignHealth, getClientCurrency, getClientTimezone, getEarliestDate, getLatestDate, getUtmMatchRate } from "@/lib/dashboard-data";
 
 export default async function CampaignsPage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
   const sp = await searchParams;
-  const earliestDate = getEarliestDate();
-  const latestDate = getLatestDate();
-  const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
   const clientId = await resolveViewedClientId(sp.clientId);
+  const timezone = await getClientTimezone(clientId);
+  const earliestDate = getEarliestDate(timezone);
+  const latestDate = getLatestDate(timezone);
+  const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
   const [campaigns, matchRate, currency] = await Promise.all([
     getCampaignHealth(clientId, range),
     getUtmMatchRate(clientId, range),

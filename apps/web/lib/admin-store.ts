@@ -192,7 +192,7 @@ export async function getGa4Properties(): Promise<Ga4Property[]> {
   return rows.map((r) => ({ propertyId: r.external_id, name: r.name, domain: r.domain ?? "" }));
 }
 
-export type BackfillStatus = "not_started" | "queued" | "running" | "complete";
+export type BackfillStatus = "not_started" | "queued" | "running" | "complete" | "failed";
 export type ConnectionStatus = "connected" | "needs_reauth" | "not_connected";
 export type BackfillSourceKey = "google" | "meta" | "ga4" | "store";
 export const BACKFILL_SOURCES: BackfillSourceKey[] = ["google", "meta", "ga4", "store"];
@@ -261,6 +261,7 @@ export function getClientBackfillSummary(client: AdminClient): BackfillStatus {
   if (relevant.length === 0) return "not_started";
   const statuses = relevant.map((s) => client.backfill[s].status);
   if (statuses.some((s) => s === "running")) return "running";
+  if (statuses.some((s) => s === "failed")) return "failed";
   if (statuses.some((s) => s === "queued")) return "queued";
   if (statuses.every((s) => s === "complete")) return "complete";
   return "not_started";
@@ -349,13 +350,15 @@ async function loadClients(clientIds?: string[]): Promise<AdminClient[]> {
       if (!job) {
         backfill[key] = { status: "not_started", range: null };
       } else {
+        // No pending and no running rows left, but not every row succeeded: some day(s) genuinely failed,
+        // not just "hasn't started yet" — surface that distinctly so it doesn't look identical to "queued".
         const status: BackfillStatus = job.any_running
           ? "running"
           : job.any_pending
             ? "queued"
             : job.all_succeeded
               ? "complete"
-              : "queued";
+              : "failed";
         backfill[key] = { status, range: { start: job.min_date, end: job.max_date } };
       }
     }
@@ -567,24 +570,34 @@ export async function deleteClient(clientId: string): Promise<void> {
  * Queues a backfill for an explicit date range, one or more sources at a
  * time: one ingest_jobs row per day per source (matches jobs/src/backfill.ts,
  * which runs per source, one day at a time). Upserted so re-queuing a
- * previously completed/failed day resets it to pending. A source already
- * queued or running is skipped rather than failing the whole request.
+ * previously completed/failed day resets it to pending.
+ *
+ * A source already "running" is left alone entirely (an existing run must
+ * never be double-fired). A source already "queued" (rows pending, nothing
+ * actively processing them) is NOT re-inserted, but is still reported back
+ * in alreadyQueued so the caller can trigger a run for it — this is what
+ * lets "Start backfill" self-heal a source that got queued but never ran.
  */
 export async function startBackfill(
   clientId: string,
   sources: BackfillSourceKey[],
   range: { start: string; end: string },
-): Promise<{ queued: BackfillSourceKey[]; blocked: BackfillSourceKey[] }> {
+): Promise<{ queued: BackfillSourceKey[]; alreadyQueued: BackfillSourceKey[]; running: BackfillSourceKey[]; storeType: "shopify" | "woocommerce" | null }> {
   const db = getDb();
   const client = await getClient(clientId);
-  if (!client || client.status === "archived") return { queued: [], blocked: sources };
+  if (!client || client.status === "archived") return { queued: [], alreadyQueued: [], running: sources, storeType: null };
 
   const queued: BackfillSourceKey[] = [];
-  const blocked: BackfillSourceKey[] = [];
+  const alreadyQueued: BackfillSourceKey[] = [];
+  const running: BackfillSourceKey[] = [];
   for (const key of sources) {
     const current = client.backfill[key].status;
-    if (current === "queued" || current === "running") {
-      blocked.push(key);
+    if (current === "running") {
+      running.push(key);
+      continue;
+    }
+    if (current === "queued") {
+      alreadyQueued.push(key);
       continue;
     }
     const ingestSource =
@@ -598,7 +611,7 @@ export async function startBackfill(
     `.execute(db);
     queued.push(key);
   }
-  return { queued, blocked };
+  return { queued, alreadyQueued, running, storeType: client.store?.type ?? null };
 }
 
 export async function createUserRecord(input: {

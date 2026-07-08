@@ -16,6 +16,7 @@ import { resolveViewedClientId } from "@/lib/viewed-client";
 import {
   getCampaignHealth,
   getClientCurrency,
+  getClientTimezone,
   getCreativeBreakdown,
   getEarliestDate,
   getLatestDate,
@@ -35,10 +36,11 @@ const CREATIVE_COLORS: Record<string, string> = {
 
 export default async function MetaPage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
   const sp = await searchParams;
-  const earliestDate = getEarliestDate();
-  const latestDate = getLatestDate();
-  const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
   const clientId = await resolveViewedClientId(sp.clientId);
+  const timezone = await getClientTimezone(clientId);
+  const earliestDate = getEarliestDate(timezone);
+  const latestDate = getLatestDate(timezone);
+  const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
 
   const [networkKpis, funnel, creatives, allCampaigns, ads, matchRate, currency] = await Promise.all([
     getNetworkKpis(clientId, "meta", range),

@@ -39,7 +39,7 @@ export function BackfillForm({
     if (state.ok) router.refresh();
   }, [state, router]);
 
-  const anySelectable = sources.some((s) => s.connected && s.status !== "queued" && s.status !== "running");
+  const anySelectable = sources.some((s) => s.connected && s.status !== "running");
 
   return (
     <form action={formAction} className="grid gap-4">
@@ -47,7 +47,7 @@ export function BackfillForm({
 
       <div className="grid gap-2">
         {sources.map((s) => {
-          const selectable = s.connected && s.status !== "queued" && s.status !== "running";
+          const selectable = s.connected && s.status !== "running";
           return (
             <label
               key={s.key}
@@ -109,7 +109,7 @@ export function BackfillForm({
           disabled={!anySelectable || pending}
           className="rounded bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-40"
         >
-          {pending ? "Queuing…" : "Start backfill"}
+          {pending ? "Starting…" : "Start backfill"}
         </button>
       </div>
 

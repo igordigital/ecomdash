@@ -32,23 +32,37 @@ function sparkBounds(end: string, days = 14): { start: string; end: string } {
 }
 
 // ---------------------------------------------------------------------------
-// Calendar bounds. Pure date math: latest complete day is always yesterday
-// (data lands once daily), independent of whether any data has loaded yet.
+// Calendar bounds. Latest complete day is always yesterday in the CLIENT'S
+// OWN timezone, not UTC: for a timezone behind UTC (e.g. America/Los_Angeles),
+// "UTC yesterday" can still be that client's own current, incomplete local
+// day depending on what time it is, which would leak same-day data into the
+// dashboard and into backfill date pickers. Never compute this in raw UTC.
 // ---------------------------------------------------------------------------
-export function getLatestDate(): string {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() - 1);
-  return d.toISOString().slice(0, 10);
+export function getLatestDate(timezone: string = "UTC"): string {
+  const now = new Date();
+  const localToday = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now); // en-CA formats as YYYY-MM-DD
+  return addDays(localToday, -1);
 }
 
-export function getEarliestDate(): string {
-  return addDays(getLatestDate(), -729);
+export function getEarliestDate(timezone: string = "UTC"): string {
+  return addDays(getLatestDate(timezone), -729);
 }
 
 /** dim_client.currency, for currency-aware formatting (see lib/format.ts#makeCurrencyFormatters). */
 export async function getClientCurrency(clientId: string): Promise<string> {
   const row = await getDb().selectFrom("dim_client").select("currency").where("client_id", "=", clientId).executeTakeFirst();
   return row?.currency ?? "USD";
+}
+
+/** dim_client.timezone, so date bounds (getLatestDate/getEarliestDate) never leak a client's still-in-progress local day. */
+export async function getClientTimezone(clientId: string): Promise<string> {
+  const row = await getDb().selectFrom("dim_client").select("timezone").where("client_id", "=", clientId).executeTakeFirst();
+  return row?.timezone ?? "UTC";
 }
 
 // ---------------------------------------------------------------------------
@@ -210,7 +224,7 @@ const ROLLING_DEFS: { key: "1d" | "7d" | "30d"; label: string; days: number }[] 
 ];
 
 export async function getRollingWindows(clientId: string): Promise<RollingWindows> {
-  const end = getLatestDate();
+  const end = getLatestDate(await getClientTimezone(clientId));
   const daily = await fetchDailyFacts(clientId, addDays(end, -59), end);
   const mer: RollingPoint[] = [];
   const spend: RollingPoint[] = [];

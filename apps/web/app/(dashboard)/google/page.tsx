@@ -4,14 +4,15 @@ import { Badge, Card, Funnel, HealthChip, PageHeader, SectionTitle, StatCard } f
 import { fmtNum, fmtNumCompact, fmtPct, fmtRatio, makeCurrencyFormatters } from "@/lib/format";
 import { resolveRange, type RangeSearchParams } from "@/lib/range";
 import { resolveViewedClientId } from "@/lib/viewed-client";
-import { getClientCurrency, getEarliestDate, getGoogleCampaigns, getLatestDate, getNetworkFunnel, getNetworkKpis } from "@/lib/dashboard-data";
+import { getClientCurrency, getClientTimezone, getEarliestDate, getGoogleCampaigns, getLatestDate, getNetworkFunnel, getNetworkKpis } from "@/lib/dashboard-data";
 
 export default async function GooglePage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
   const sp = await searchParams;
-  const earliestDate = getEarliestDate();
-  const latestDate = getLatestDate();
-  const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
   const clientId = await resolveViewedClientId(sp.clientId);
+  const timezone = await getClientTimezone(clientId);
+  const earliestDate = getEarliestDate(timezone);
+  const latestDate = getLatestDate(timezone);
+  const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
 
   const [networkKpis, funnel, campaigns, currency] = await Promise.all([
     getNetworkKpis(clientId, "google", range),

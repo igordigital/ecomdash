@@ -5,6 +5,7 @@ import { fmtNumCompact, fmtPct } from "@/lib/format";
 import { resolveRange, type RangeSearchParams } from "@/lib/range";
 import { resolveViewedClientId } from "@/lib/viewed-client";
 import {
+  getClientTimezone,
   getEarliestDate,
   getFunnelTrend,
   getLatestDate,
@@ -15,10 +16,11 @@ import {
 
 export default async function FunnelPage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
   const sp = await searchParams;
-  const earliestDate = getEarliestDate();
-  const latestDate = getLatestDate();
-  const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
   const clientId = await resolveViewedClientId(sp.clientId);
+  const timezone = await getClientTimezone(clientId);
+  const earliestDate = getEarliestDate(timezone);
+  const latestDate = getLatestDate(timezone);
+  const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
 
   const [site, metaFunnel, googleFunnel, meta, google, trend] = await Promise.all([
     getSiteFunnel(clientId, range),

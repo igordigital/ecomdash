@@ -8,6 +8,7 @@ import {
   getCampaignTraffic,
   getChannelSummaries,
   getClientCurrency,
+  getClientTimezone,
   getContentTraffic,
   getEarliestDate,
   getLatestDate,
@@ -17,10 +18,11 @@ import {
 
 export default async function TrafficPage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
   const sp = await searchParams;
-  const earliestDate = getEarliestDate();
-  const latestDate = getLatestDate();
-  const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
   const clientId = await resolveViewedClientId(sp.clientId);
+  const timezone = await getClientTimezone(clientId);
+  const earliestDate = getEarliestDate(timezone);
+  const latestDate = getLatestDate(timezone);
+  const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
 
   // Channels first: the chart's series list is exactly the top-10 channel names from the table, so they always match.
   const [channels, campaigns, content, ecommerce, currency] = await Promise.all([

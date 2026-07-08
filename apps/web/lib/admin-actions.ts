@@ -149,6 +149,14 @@ export interface BackfillState {
   message?: string;
 }
 
+/**
+ * Queues the selected sources, then immediately fires the real processors
+ * (same fire-and-forget pattern as the individual "Run X now" buttons) for
+ * anything that just got queued or was already queued but never ran — the
+ * old version only ever queued, so a source could sit "queued" forever
+ * unless someone separately clicked "Run X now". Only a source that's
+ * actively "running" right now is skipped, to avoid double-processing.
+ */
 export async function startBackfillAction(_prev: BackfillState, formData: FormData): Promise<BackfillState> {
   const clientId = String(formData.get("clientId") ?? "");
   const start = String(formData.get("start") ?? "");
@@ -159,19 +167,31 @@ export async function startBackfillAction(_prev: BackfillState, formData: FormDa
   if (start > end) return { ok: false, error: "Start date must be before the end date." };
   if (sources.length === 0) return { ok: false, error: "Select at least one source to backfill." };
 
-  const { queued, blocked } = await startBackfillRecord(clientId, sources, { start, end });
-  if (queued.length === 0) {
-    return { ok: false, error: "Every selected source already has a backfill in progress." };
+  const { queued, alreadyQueued, running, storeType } = await startBackfillRecord(clientId, sources, { start, end });
+  const runnable = [...queued, ...alreadyQueued];
+  if (runnable.length === 0) {
+    return { ok: false, error: "Every selected source already has a backfill running." };
   }
-  if (blocked.length > 0) {
+
+  for (const key of runnable) {
+    if (key === "ga4") {
+      void runPendingGa4Jobs(clientId).catch((err) => console.error("GA4 job run failed for client", clientId, err));
+    } else if (key === "meta") {
+      void runPendingMetaJobs(clientId).catch((err) => console.error("Meta job run failed for client", clientId, err));
+    } else if (key === "store" && storeType === "woocommerce") {
+      void runPendingWooJobs(clientId).catch((err) => console.error("WooCommerce job run failed for client", clientId, err));
+    }
+    // "google", and "store" when storeType is "shopify" or null: no real processor yet, rows stay queued only.
+  }
+
+  const startedLabel = runnable.map((s) => SOURCE_LABELS[s]).join(", ");
+  if (running.length > 0) {
     return {
       ok: true,
-      message: `Queued ${queued.map((s) => SOURCE_LABELS[s]).join(", ")}. Skipped ${blocked
-        .map((s) => SOURCE_LABELS[s])
-        .join(", ")} (already in progress).`,
+      message: `Queued and started: ${startedLabel}. Skipped ${running.map((s) => SOURCE_LABELS[s]).join(", ")} (already running).`,
     };
   }
-  return { ok: true };
+  return { ok: true, message: `Queued and started: ${startedLabel}.` };
 }
 
 export async function archiveClientAction(clientId: string): Promise<void> {

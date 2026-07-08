@@ -21,7 +21,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
   const clientUsers = users.filter((u) => u.clientId === client.id);
 
-  const latestDate = getLatestDate();
+  const latestDate = getLatestDate(client.timezone);
   const sourceRows: BackfillSourceRow[] = [
     {
       key: "google",

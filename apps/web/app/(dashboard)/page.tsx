@@ -18,6 +18,7 @@ import {
   MER_TARGET,
   getAnomalies,
   getClientCurrency,
+  getClientTimezone,
   getEarliestDate,
   getLatestDate,
   getMerSeries,
@@ -34,10 +35,11 @@ export default async function OverviewPage({
   searchParams: Promise<RangeSearchParams>;
 }) {
   const sp = await searchParams;
-  const earliestDate = getEarliestDate();
-  const latestDate = getLatestDate();
-  const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
   const clientId = await resolveViewedClientId(sp.clientId);
+  const timezone = await getClientTimezone(clientId);
+  const earliestDate = getEarliestDate(timezone);
+  const latestDate = getLatestDate(timezone);
+  const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
 
   const [rolling, kpis, store, series, meta, google, funnel, anomalies, currency] = await Promise.all([
     getRollingWindows(clientId),

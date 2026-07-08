@@ -3,7 +3,7 @@ import { Badge, Card, PageHeader } from "@/components/ui";
 import { makeCurrencyFormatters } from "@/lib/format";
 import { resolveRange, type RangeSearchParams } from "@/lib/range";
 import { resolveViewedClientId } from "@/lib/viewed-client";
-import { getAnomalies, getClientCurrency, getEarliestDate, getLatestDate } from "@/lib/dashboard-data";
+import { getAnomalies, getClientCurrency, getClientTimezone, getEarliestDate, getLatestDate } from "@/lib/dashboard-data";
 
 const KIND_LABEL: Record<string, string> = {
   spend_swing: "Spend swing",
@@ -13,10 +13,11 @@ const KIND_LABEL: Record<string, string> = {
 
 export default async function AnomaliesPage({ searchParams }: { searchParams: Promise<RangeSearchParams> }) {
   const sp = await searchParams;
-  const earliestDate = getEarliestDate();
-  const latestDate = getLatestDate();
-  const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
   const clientId = await resolveViewedClientId(sp.clientId);
+  const timezone = await getClientTimezone(clientId);
+  const earliestDate = getEarliestDate(timezone);
+  const latestDate = getLatestDate(timezone);
+  const range = resolveRange(sp, { earliest: earliestDate, latest: latestDate });
   const [anomalies, currency] = await Promise.all([getAnomalies(clientId, range), getClientCurrency(clientId)]);
   const { fmtUsd } = makeCurrencyFormatters(currency);
 

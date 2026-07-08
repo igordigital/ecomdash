@@ -7,6 +7,7 @@
 
 import { getDb } from "./db";
 import { getMetaAccessToken } from "./admin-store";
+import { reclaimStaleRunningJobs } from "./ingest-jobs";
 import { fetchMetaAdAccountCurrency, fetchMetaAdInsights, type MetaAdInsightRow } from "./meta-reports";
 
 export interface MetaJobResult {
@@ -79,6 +80,8 @@ export async function runPendingMetaJobs(clientId: string): Promise<MetaJobResul
   if (!accessToken) throw new Error("Meta is not connected at the agency level. Connect it on the Integrations page first.");
 
   const currency = await fetchMetaAdAccountCurrency(accessToken, accountId);
+
+  await reclaimStaleRunningJobs(clientId, "meta");
 
   const jobs = await db
     .selectFrom("ingest_jobs")

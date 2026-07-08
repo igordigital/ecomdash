@@ -10,6 +10,7 @@
  */
 
 import { getDb } from "./db";
+import { reclaimStaleRunningJobs } from "./ingest-jobs";
 import { fetchWooCustomerFirstOrderId, fetchWooOrders, fetchWooProducts, type WooCredentials, type WooOrderRaw } from "./woo-api";
 
 export interface WooJobResult {
@@ -236,6 +237,8 @@ export async function runPendingWooJobs(clientId: string): Promise<WooJobResult[
 
   const client = await db.selectFrom("dim_client").select("timezone").where("client_id", "=", clientId).executeTakeFirst();
   const timezone = client?.timezone ?? "UTC";
+
+  await reclaimStaleRunningJobs(clientId, "woo");
 
   const jobs = await db
     .selectFrom("ingest_jobs")

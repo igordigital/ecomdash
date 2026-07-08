@@ -10,6 +10,7 @@
 import { getDb } from "./db";
 import { getGa4RefreshToken } from "./admin-store";
 import { refreshGa4AccessToken } from "./ga4-oauth";
+import { reclaimStaleRunningJobs } from "./ingest-jobs";
 import {
   fetchGa4CampaignReport,
   fetchGa4ContentReport,
@@ -148,6 +149,8 @@ export async function runPendingGa4Jobs(clientId: string): Promise<Ga4JobResult[
   const refreshToken = await getGa4RefreshToken();
   if (!refreshToken) throw new Error("GA4 is not connected at the agency level. Connect it on the Integrations page first.");
   const { accessToken } = await refreshGa4AccessToken(refreshToken);
+
+  await reclaimStaleRunningJobs(clientId, "ga4");
 
   const jobs = await db
     .selectFrom("ingest_jobs")

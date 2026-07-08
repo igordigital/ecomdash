@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import {
   archiveClientAction,
   assignUserClientAction,
@@ -10,10 +10,14 @@ import {
   removeUserAction,
   runGa4NowAction,
   runMetaNowAction,
+  runWooNowAction,
+  saveWooConnectionAction,
+  type SaveWooState,
   unarchiveClientAction,
 } from "@/lib/admin-actions";
 import { ConnectionStatusBadge } from "@/components/admin/ui";
 import type { AdminClient, ConnectablePlatform, ConnectionStatus } from "@/lib/admin-store";
+import { WOO_STATUS_OPTIONS } from "@/lib/woo-constants";
 
 export function AssignClientSelect({
   userId,
@@ -251,6 +255,7 @@ export function ConnectAccountControl({
 const RUN_NOW_ACTIONS = {
   ga4: runGa4NowAction,
   meta: runMetaNowAction,
+  woo: runWooNowAction,
 } as const;
 
 /**
@@ -292,5 +297,108 @@ export function RunSourceNowButton({
       </button>
       {started ? <span className="text-xs text-slate-500">Started — reload in a bit to see progress.</span> : null}
     </div>
+  );
+}
+
+const initialSaveWooState: SaveWooState = { ok: false };
+
+/**
+ * Unlike ConnectAccountControl, this isn't a picker over an agency-preauthorized
+ * list: WooCommerce is per-client, so the site URL and consumer key/secret are
+ * typed in directly here and tested live before saving (see saveWooConnectionAction).
+ */
+export function WooConnectControl({
+  clientId,
+  current,
+}: {
+  clientId: string;
+  current: { domain: string; includedStatuses?: string[]; status: ConnectionStatus } | null;
+}) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(!current);
+  const [statuses, setStatuses] = useState<string[]>(current?.includedStatuses ?? ["completed", "processing"]);
+  const [state, formAction, pending] = useActionState(saveWooConnectionAction, initialSaveWooState);
+
+  useEffect(() => {
+    if (state.ok) {
+      setEditing(false);
+      router.refresh();
+    }
+  }, [state, router]);
+
+  if (!editing && current) {
+    return (
+      <div className="flex items-center justify-between text-sm">
+        <div>
+          <p className="text-slate-200">WooCommerce · {current.domain}</p>
+          {current.includedStatuses ? <p className="text-xs text-slate-500">Revenue statuses: {current.includedStatuses.join(", ")}</p> : null}
+        </div>
+        <div className="flex items-center gap-2">
+          <ConnectionStatusBadge status={current.status} />
+          <button type="button" onClick={() => setEditing(true)} className="text-xs text-slate-400 hover:underline">
+            Update keys
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <form action={formAction} className="grid gap-3">
+      <input type="hidden" name="clientId" value={clientId} />
+      <label className="grid gap-1 text-sm">
+        <span className="text-slate-400">Site URL</span>
+        <input
+          name="siteUrl"
+          defaultValue={current?.domain ?? ""}
+          placeholder="https://mystore.com"
+          className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+        />
+      </label>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="grid gap-1 text-sm">
+          <span className="text-slate-400">Consumer key</span>
+          <input name="consumerKey" placeholder="ck_..." className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" />
+        </label>
+        <label className="grid gap-1 text-sm">
+          <span className="text-slate-400">Consumer secret</span>
+          <input name="consumerSecret" type="password" placeholder="cs_..." className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" />
+        </label>
+      </div>
+      {current ? (
+        <p className="text-[11px] text-slate-600">
+          WooCommerce never lets us show you a saved secret again, so both fields are required every time you save here, even if
+          you&apos;re only changing the revenue statuses below.
+        </p>
+      ) : null}
+      <div>
+        <p className="mb-1.5 text-sm text-slate-400">Order statuses that count toward revenue</p>
+        <div className="flex flex-wrap gap-3">
+          {WOO_STATUS_OPTIONS.map((opt) => (
+            <label key={opt.value} className="flex items-center gap-1.5 text-xs text-slate-300">
+              <input
+                type="checkbox"
+                name="includedStatuses"
+                value={opt.value}
+                checked={statuses.includes(opt.value)}
+                onChange={(e) => setStatuses((s) => (e.target.checked ? [...s, opt.value] : s.filter((v) => v !== opt.value)))}
+              />
+              {opt.label}
+            </label>
+          ))}
+        </div>
+      </div>
+      {state.error ? <p className="text-sm text-red-400">{state.error}</p> : null}
+      <div className="flex items-center gap-3">
+        <button type="submit" disabled={pending} className="w-fit rounded bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500 disabled:opacity-50">
+          {pending ? "Testing connection…" : "Save and test connection"}
+        </button>
+        {current ? (
+          <button type="button" disabled={pending} onClick={() => setEditing(false)} className="text-xs text-slate-500 hover:underline">
+            Cancel
+          </button>
+        ) : null}
+      </div>
+    </form>
   );
 }

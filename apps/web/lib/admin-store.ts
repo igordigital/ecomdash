@@ -459,6 +459,28 @@ export async function connectClientAccount(clientId: string, platform: Connectab
     .execute();
 }
 
+/**
+ * Sets (or replaces) the per-client WooCommerce connection from the client
+ * detail page. Unlike connectClientAccount, this is not picking from an
+ * agency-preauthorized list: the key/secret are typed in directly and land
+ * in client_credentials.config as plaintext jsonb, the same pattern already
+ * used for Meta's/GA4's agency-level tokens (no Vault integration exists in
+ * this codebase yet). Always overwrites both key and secret together —
+ * WooCommerce never lets us read a secret back to prefill an edit form, so
+ * there is no safe way to let one field carry over silently.
+ */
+export async function saveWooConnection(
+  clientId: string,
+  input: { siteUrl: string; consumerKey: string; consumerSecret: string; includedStatuses: string[] },
+): Promise<void> {
+  const config = { domain: input.siteUrl, consumerKey: input.consumerKey, consumerSecret: input.consumerSecret, includedStatuses: input.includedStatuses };
+  await getDb()
+    .insertInto("client_credentials")
+    .values({ client_id: clientId, source: "woo", config, status: "active" })
+    .onConflict((oc) => oc.columns(["client_id", "source"]).doUpdateSet({ config, status: "active", updated_at: new Date() }))
+    .execute();
+}
+
 export interface NewClientInput {
   name: string;
   timezone: string;
@@ -468,7 +490,7 @@ export interface NewClientInput {
   ga4PropertyId: string | null;
   store:
     | { type: "shopify"; domain: string }
-    | { type: "woocommerce"; domain: string; includedStatuses: string[] }
+    | { type: "woocommerce"; domain: string; consumerKey: string; consumerSecret: string; includedStatuses: string[] }
     | null;
 }
 
@@ -493,7 +515,15 @@ export async function createClientRecord(input: NewClientInput): Promise<AdminCl
     credentials.push({
       client_id: client.client_id,
       source: input.store.type === "shopify" ? "shopify" : "woo",
-      config: input.store.type === "shopify" ? { domain: input.store.domain } : { domain: input.store.domain, includedStatuses: input.store.includedStatuses },
+      config:
+        input.store.type === "shopify"
+          ? { domain: input.store.domain }
+          : {
+              domain: input.store.domain,
+              consumerKey: input.store.consumerKey,
+              consumerSecret: input.store.consumerSecret,
+              includedStatuses: input.store.includedStatuses,
+            },
       status: "active",
     });
   }

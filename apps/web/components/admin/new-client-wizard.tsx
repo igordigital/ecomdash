@@ -4,17 +4,10 @@ import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClientAction, type CreateClientState } from "@/lib/admin-actions";
 import type { Ga4Property, GoogleAdsAccount, MetaAdAccount } from "@/lib/admin-store";
+import { WOO_STATUS_OPTIONS } from "@/lib/woo-constants";
 import { Badge } from "@/components/ui";
 
 const STEPS = ["Client info", "Google Ads", "Meta Ads", "GA4", "Store", "Review"] as const;
-
-const WOO_STATUS_OPTIONS = [
-  { value: "completed", label: "Completed" },
-  { value: "processing", label: "Processing" },
-  { value: "on-hold", label: "On hold" },
-  { value: "pending", label: "Pending payment" },
-  { value: "refunded", label: "Refunded" },
-];
 
 interface WizardState {
   name: string;
@@ -390,6 +383,8 @@ export function NewClientWizard({
             <input type="hidden" name="storeType" value={state.storeType ?? ""} />
             <input type="hidden" name="shopifyDomain" value={state.shopifyDomain} />
             <input type="hidden" name="wooDomain" value={state.wooDomain} />
+            <input type="hidden" name="wooKey" value={state.wooKey} />
+            <input type="hidden" name="wooSecret" value={state.wooSecret} />
             {state.wooStatuses.map((s) => (
               <input key={s} type="hidden" name="wooStatuses" value={s} />
             ))}

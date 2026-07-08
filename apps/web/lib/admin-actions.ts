@@ -13,6 +13,7 @@ import {
   findUserByEmail,
   getUser,
   removeUser as removeUserRecord,
+  saveWooConnection,
   setUserPassword,
   startBackfill as startBackfillRecord,
   unarchiveClient,
@@ -22,6 +23,8 @@ import {
 } from "./admin-store";
 import { runPendingGa4Jobs } from "./ga4-ingest";
 import { runPendingMetaJobs } from "./meta-ingest";
+import { runPendingWooJobs } from "./woo-ingest";
+import { normalizeWooSiteUrl, testWooConnection } from "./woo-api";
 
 const SOURCE_LABELS: Record<BackfillSourceKey, string> = {
   google: "Google",
@@ -61,8 +64,22 @@ export async function createClientAction(
     if (domain) store = { type: "shopify", domain };
   } else if (storeType === "woocommerce") {
     const domain = String(formData.get("wooDomain") ?? "").trim();
+    const consumerKey = String(formData.get("wooKey") ?? "").trim();
+    const consumerSecret = String(formData.get("wooSecret") ?? "").trim();
     const includedStatuses = formData.getAll("wooStatuses").map(String);
-    if (domain) store = { type: "woocommerce", domain, includedStatuses };
+    if (domain) {
+      if (!consumerKey || !consumerSecret) {
+        return { ok: false, error: "WooCommerce consumer key and secret are required to connect the store." };
+      }
+      const siteUrl = normalizeWooSiteUrl(domain);
+      try {
+        await testWooConnection({ siteUrl, consumerKey, consumerSecret });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return { ok: false, error: `Could not connect to WooCommerce: ${message}` };
+      }
+      store = { type: "woocommerce", domain: siteUrl, consumerKey, consumerSecret, includedStatuses };
+    }
   }
 
   const record = await createClientRecord({
@@ -193,6 +210,50 @@ export async function runMetaNowAction(clientId: string): Promise<{ ok: true }> 
   void runPendingMetaJobs(clientId).catch((err) => {
     console.error("Meta job run failed for client", clientId, err);
   });
+  return { ok: true };
+}
+
+/** Same fire-and-forget shape as runGa4NowAction. */
+export async function runWooNowAction(clientId: string): Promise<{ ok: true }> {
+  void runPendingWooJobs(clientId).catch((err) => {
+    console.error("WooCommerce job run failed for client", clientId, err);
+  });
+  return { ok: true };
+}
+
+export interface SaveWooState {
+  ok: boolean;
+  error?: string;
+}
+
+/**
+ * Tests the given WooCommerce credentials against the live store before
+ * saving, so a typo'd URL or key never gets silently persisted as a
+ * "connected" store that then fails on every backfill. Always overwrites
+ * both key and secret, since WooCommerce never lets us read a saved secret
+ * back to prefill the edit form.
+ */
+export async function saveWooConnectionAction(_prev: SaveWooState, formData: FormData): Promise<SaveWooState> {
+  const clientId = String(formData.get("clientId") ?? "");
+  const siteUrlRaw = String(formData.get("siteUrl") ?? "").trim();
+  const consumerKey = String(formData.get("consumerKey") ?? "").trim();
+  const consumerSecret = String(formData.get("consumerSecret") ?? "").trim();
+  const includedStatuses = formData.getAll("includedStatuses").map(String);
+
+  if (!clientId) return { ok: false, error: "Missing client." };
+  if (!siteUrlRaw) return { ok: false, error: "Site URL is required." };
+  if (!consumerKey || !consumerSecret) return { ok: false, error: "Consumer key and secret are required." };
+  if (includedStatuses.length === 0) return { ok: false, error: "Select at least one order status to count toward revenue." };
+
+  const siteUrl = normalizeWooSiteUrl(siteUrlRaw);
+  try {
+    await testWooConnection({ siteUrl, consumerKey, consumerSecret });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: `Could not connect to WooCommerce: ${message}` };
+  }
+
+  await saveWooConnection(clientId, { siteUrl, consumerKey, consumerSecret, includedStatuses });
   return { ok: true };
 }
 

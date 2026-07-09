@@ -3,11 +3,12 @@ import { SESSION_COOKIE, verifySession } from "@/lib/auth";
 
 /**
  * Login gate for the whole app. Runs on every request except Next internals
- * and the cron-called revalidate endpoint (which authenticates with its own
- * shared secret header, not a user session).
+ * and endpoints that authenticate with their own shared secret header
+ * instead of a user session: api/revalidate, and api/cron/* (called by a
+ * scheduled Railway cron service, not a logged-in browser).
  */
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/revalidate).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/revalidate|api/cron).*)"],
 };
 
 export default async function middleware(req: NextRequest) {

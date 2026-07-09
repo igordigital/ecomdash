@@ -18,6 +18,7 @@ const LINKS = [
   { href: "/admin/clients", label: "Clients" },
   { href: "/admin/integrations", label: "Integrations", adminOnly: true },
   { href: "/admin/users", label: "Users" },
+  { href: "/admin/logs", label: "Logs" },
 ];
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {

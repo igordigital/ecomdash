@@ -441,6 +441,100 @@ export async function getClient(id: string): Promise<AdminClient | undefined> {
   return client;
 }
 
+export type IngestJobStatus = "pending" | "running" | "succeeded" | "failed";
+export type IngestJobKind = "backfill" | "daily";
+
+export interface IngestJobLogRow {
+  id: string;
+  clientId: string;
+  clientName: string;
+  source: string;
+  date: string;
+  kind: IngestJobKind;
+  status: IngestJobStatus;
+  attempts: number;
+  lastError: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+}
+
+export interface IngestJobLogFilters {
+  clientId?: string;
+  source?: string;
+  status?: IngestJobStatus;
+  kind?: IngestJobKind;
+  page: number;
+}
+
+export const INGEST_LOG_PAGE_SIZE = 50;
+
+/** Debug view over ingest_jobs: every API pull attempt across every client, source, and day, newest first. */
+export async function getIngestJobLog(filters: IngestJobLogFilters): Promise<{ rows: IngestJobLogRow[]; total: number }> {
+  const db = getDb();
+
+  let rowsQuery = db
+    .selectFrom("ingest_jobs")
+    .innerJoin("dim_client", "dim_client.client_id", "ingest_jobs.client_id")
+    .select([
+      "ingest_jobs.id as id",
+      "ingest_jobs.client_id as clientId",
+      "dim_client.name as clientName",
+      "ingest_jobs.source as source",
+      "ingest_jobs.date as date",
+      "ingest_jobs.kind as kind",
+      "ingest_jobs.status as status",
+      "ingest_jobs.attempts as attempts",
+      "ingest_jobs.last_error as lastError",
+      "ingest_jobs.started_at as startedAt",
+      "ingest_jobs.finished_at as finishedAt",
+      "ingest_jobs.created_at as createdAt",
+    ]);
+  let countQuery = db.selectFrom("ingest_jobs").select(({ fn }) => fn.countAll().as("count"));
+
+  if (filters.clientId) {
+    rowsQuery = rowsQuery.where("ingest_jobs.client_id", "=", filters.clientId);
+    countQuery = countQuery.where("client_id", "=", filters.clientId);
+  }
+  if (filters.source) {
+    rowsQuery = rowsQuery.where("ingest_jobs.source", "=", filters.source);
+    countQuery = countQuery.where("source", "=", filters.source);
+  }
+  if (filters.status) {
+    rowsQuery = rowsQuery.where("ingest_jobs.status", "=", filters.status);
+    countQuery = countQuery.where("status", "=", filters.status);
+  }
+  if (filters.kind) {
+    rowsQuery = rowsQuery.where("ingest_jobs.kind", "=", filters.kind);
+    countQuery = countQuery.where("kind", "=", filters.kind);
+  }
+
+  const [rows, countResult] = await Promise.all([
+    rowsQuery
+      .orderBy("ingest_jobs.id", "desc")
+      .limit(INGEST_LOG_PAGE_SIZE)
+      .offset((filters.page - 1) * INGEST_LOG_PAGE_SIZE)
+      .execute(),
+    countQuery.executeTakeFirst(),
+  ]);
+
+  return {
+    rows: rows.map((r) => ({
+      ...r,
+      startedAt: r.startedAt ? String(r.startedAt) : null,
+      finishedAt: r.finishedAt ? String(r.finishedAt) : null,
+      createdAt: String(r.createdAt),
+    })),
+    total: Number(countResult?.count ?? 0),
+  };
+}
+
+/** Distinct source values seen in ingest_jobs, for the log page's filter dropdown -- covers every connector ever queued, not just the four currently wired up. */
+export async function getIngestJobSources(): Promise<string[]> {
+  const rows = await getDb().selectFrom("ingest_jobs").select("source").distinct().orderBy("source", "asc").execute();
+  return rows.map((r) => r.source);
+}
+
 export async function getUsers(): Promise<AdminUser[]> {
   const rows = await getDb().selectFrom("app_users").selectAll().orderBy("created_at", "asc").execute();
   return rows.map((r) => ({

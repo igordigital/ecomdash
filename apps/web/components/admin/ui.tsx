@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui";
-import type { BackfillStatus, ClientLifecycleStatus, ConnectionStatus } from "@/lib/admin-store";
+import type { BackfillStatus, ClientLifecycleStatus, ConnectionStatus, IngestJobStatus } from "@/lib/admin-store";
 
 export function ConnectionStatusBadge({ status }: { status: ConnectionStatus }) {
   if (status === "connected") return <Badge tone="good">Connected</Badge>;
@@ -23,6 +23,18 @@ const BACKFILL_META: Record<BackfillStatus, { label: string; tone: "neutral" | "
 
 export function BackfillBadge({ status }: { status: BackfillStatus }) {
   const m = BACKFILL_META[status];
+  return <Badge tone={m.tone}>{m.label}</Badge>;
+}
+
+const JOB_STATUS_META: Record<IngestJobStatus, { label: string; tone: "neutral" | "info" | "warn" | "good" | "bad" }> = {
+  pending: { label: "Pending", tone: "info" },
+  running: { label: "Running", tone: "warn" },
+  succeeded: { label: "Succeeded", tone: "good" },
+  failed: { label: "Failed", tone: "bad" },
+};
+
+export function JobStatusBadge({ status }: { status: IngestJobStatus }) {
+  const m = JOB_STATUS_META[status];
   return <Badge tone={m.tone}>{m.label}</Badge>;
 }
 

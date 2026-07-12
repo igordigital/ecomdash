@@ -18,7 +18,10 @@ export { fetchGoogleEmail };
 
 const GOOGLE_ADS_SCOPE = "openid email https://www.googleapis.com/auth/adwords";
 const CALLBACK_PATH = "/api/admin/integrations/google-ads/callback";
-const API_VERSION = "v19";
+// Google sunsets an API version roughly a year after release, with no warning here beyond
+// a 404 (not a JSON error). v19 was already gone by 2026-07; confirmed v22 is live via a
+// direct curl before bumping to it (401 on a dummy token = routable, vs 404 = doesn't exist).
+const API_VERSION = "v22";
 const API_BASE = `https://googleads.googleapis.com/${API_VERSION}`;
 
 function getClientCredentials(): { clientId: string; clientSecret: string } {

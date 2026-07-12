@@ -10,7 +10,8 @@
 
 import { normalizedMccId } from "./google-ads-oauth";
 
-const API_VERSION = "v19";
+// Keep in sync with lib/google-ads-oauth.ts's API_VERSION -- see the comment there.
+const API_VERSION = "v22";
 const API_BASE = `https://googleads.googleapis.com/${API_VERSION}`;
 
 function requireDeveloperToken(): string {

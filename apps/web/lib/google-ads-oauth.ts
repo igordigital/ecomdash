@@ -112,10 +112,6 @@ interface CustomerClientRow {
     descriptiveName?: string;
     currencyCode?: string;
     manager: boolean;
-    // int64 fields come back as JSON strings from this API (protobuf-JSON avoids precision
-    // loss in JS doubles), e.g. "level": "1" -- confirmed against the real response before
-    // fixing this, since comparing it against the number 1 silently dropped every row.
-    level: string;
   };
 }
 interface SearchResponse {
@@ -130,12 +126,17 @@ export interface GoogleAdsAccountSummary {
 }
 
 /**
- * Walks the MCC's direct client accounts via the customer_client resource
- * (not customers:listAccessibleCustomers, which only returns accounts the
- * OAuth user was individually granted access to -- an agency's real client
- * list lives under the MCC hierarchy instead). level <= 1 keeps this to the
- * MCC itself (0) and its direct children (1); nested sub-manager accounts
- * are excluded client-side since they aren't real ad accounts to assign.
+ * Walks the MCC's client accounts via the customer_client resource (not
+ * customers:listAccessibleCustomers, which only returns accounts the OAuth
+ * user was individually granted access to -- an agency's real client list
+ * lives under the MCC hierarchy instead). Deliberately unrestricted by
+ * level: a real MCC can nest client accounts under intermediate
+ * sub-manager accounts ("departments"/regional sub-MCCs) rather than
+ * directly under the top-level MCC -- confirmed against a real account
+ * structure where actual client ad accounts sat two levels deep under two
+ * sub-manager accounts, which an earlier level<=1 restriction silently
+ * missed entirely. Every non-manager row in the full hierarchy, at any
+ * depth, is a real ad account worth listing.
  */
 export async function listGoogleAdsAccounts(accessToken: string): Promise<GoogleAdsAccountSummary[]> {
   const mccId = normalizedMccId();
@@ -153,8 +154,7 @@ export async function listGoogleAdsAccounts(accessToken: string): Promise<Google
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        query:
-          "SELECT customer_client.client_customer, customer_client.descriptive_name, customer_client.currency_code, customer_client.manager, customer_client.level FROM customer_client WHERE customer_client.level <= 1",
+        query: "SELECT customer_client.client_customer, customer_client.descriptive_name, customer_client.currency_code, customer_client.manager FROM customer_client",
         pageToken,
       }),
     });
@@ -162,7 +162,7 @@ export async function listGoogleAdsAccounts(accessToken: string): Promise<Google
     const json: SearchResponse = await res.json();
     for (const row of json.results ?? []) {
       const cc = row.customerClient;
-      if (Number(cc.level) !== 1 || cc.manager) continue;
+      if (cc.manager) continue;
       const customerId = cc.clientCustomer.replace("customers/", "");
       accounts.push({ customerId, name: cc.descriptiveName ?? customerId, currency: cc.currencyCode ?? "USD" });
     }

@@ -112,7 +112,10 @@ interface CustomerClientRow {
     descriptiveName?: string;
     currencyCode?: string;
     manager: boolean;
-    level: number;
+    // int64 fields come back as JSON strings from this API (protobuf-JSON avoids precision
+    // loss in JS doubles), e.g. "level": "1" -- confirmed against the real response before
+    // fixing this, since comparing it against the number 1 silently dropped every row.
+    level: string;
   };
 }
 interface SearchResponse {
@@ -159,7 +162,7 @@ export async function listGoogleAdsAccounts(accessToken: string): Promise<Google
     const json: SearchResponse = await res.json();
     for (const row of json.results ?? []) {
       const cc = row.customerClient;
-      if (cc.level !== 1 || cc.manager) continue;
+      if (Number(cc.level) !== 1 || cc.manager) continue;
       const customerId = cc.clientCustomer.replace("customers/", "");
       accounts.push({ customerId, name: cc.descriptiveName ?? customerId, currency: cc.currencyCode ?? "USD" });
     }

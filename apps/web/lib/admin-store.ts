@@ -282,6 +282,8 @@ export interface AdminClient {
   ga4: { propertyId: string; name: string; status: ConnectionStatus } | null;
   store: StoreConnection | null;
   backfill: Record<BackfillSourceKey, SourceBackfillState>;
+  /** Flat recurring monthly ad-spend budget, or null if none is set for this client. */
+  monthlyBudget: number | null;
 }
 
 /** Whether a source has a live connection a backfill could actually pull from right now. */
@@ -415,6 +417,7 @@ async function loadClients(clientIds?: string[]): Promise<AdminClient[]> {
       createdAt: String(c.created_at).slice(0, 10),
       status: c.status,
       archivedAt: c.archived_at ? String(c.archived_at).slice(0, 10) : null,
+      monthlyBudget: c.monthly_ad_budget != null ? Number(c.monthly_ad_budget) : null,
       google: googleCred && googleConfig ? { customerId: googleConfig.external_id, name: googleConfig.name, status: connStatus(googleCred.status) } : null,
       meta: metaCred && metaConfig ? { accountId: metaConfig.external_id, name: metaConfig.name, status: connStatus(metaCred.status) } : null,
       ga4: ga4Cred && ga4Config ? { propertyId: ga4Config.external_id, name: ga4Config.name, status: connStatus(ga4Cred.status) } : null,
@@ -689,6 +692,15 @@ export async function unarchiveClient(clientId: string): Promise<void> {
   await getDb()
     .updateTable("dim_client")
     .set({ status: "active", archived_at: null })
+    .where("client_id", "=", clientId)
+    .execute();
+}
+
+/** Flat recurring monthly ad-spend budget, applied to every month until changed. Pass null to clear it. */
+export async function updateClientBudget(clientId: string, amount: number | null): Promise<void> {
+  await getDb()
+    .updateTable("dim_client")
+    .set({ monthly_ad_budget: amount })
     .where("client_id", "=", clientId)
     .execute();
 }

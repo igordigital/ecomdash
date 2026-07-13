@@ -3,6 +3,7 @@ import { MetricTrend, SpendRevenueChart } from "@/components/charts";
 import { RangeSelector } from "@/components/range-selector";
 import {
   Badge,
+  BudgetCard,
   Card,
   Funnel,
   MultiWindowStat,
@@ -57,6 +58,8 @@ export default async function OverviewPage({
   ]);
   const { fmtUsd, fmtUsdCompact } = makeCurrencyFormatters(currency);
   const topAnomalies = anomalies.slice(0, 3);
+  const spendTotal = series.reduce((s, p) => s + p.metaSpend + p.googleSpend, 0);
+  const revenueTotal = series.reduce((s, p) => s + p.revenue, 0);
 
   return (
     <>
@@ -85,9 +88,11 @@ export default async function OverviewPage({
       <SectionTitle hint="Month-to-date spend projected to a full month at current pace. Always anchored to the calendar month, independent of the range selector above.">
         Run rate
       </SectionTitle>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <RunRateCard label="Total" color="#a78bfa" stat={runRate.total} fmt={fmtUsdCompact} />
         <RunRateCard label="Meta" color="#38bdf8" stat={runRate.meta} fmt={fmtUsdCompact} />
         <RunRateCard label="Google Ads" color="#34d399" stat={runRate.google} fmt={fmtUsdCompact} />
+        {runRate.budget ? <BudgetCard budget={runRate.budget} fmt={fmtUsdCompact} /> : null}
       </div>
 
       <SectionTitle hint={`${range.label}, ${range.compareLabel}. Set by the range selector above.`}>
@@ -139,6 +144,16 @@ export default async function OverviewPage({
           title="Daily spend vs store net revenue"
           subtitle="Spend from Meta and Google. Revenue only from the store, never from platform conversions."
         >
+          <div className="mb-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+            <p>
+              <span className="text-slate-500">Total spend </span>
+              <span className="font-semibold tabular-nums text-slate-100">{fmtUsdCompact(spendTotal)}</span>
+            </p>
+            <p>
+              <span className="text-slate-500">Total store net revenue </span>
+              <span className="font-semibold tabular-nums text-slate-100">{fmtUsdCompact(revenueTotal)}</span>
+            </p>
+          </div>
           <SpendRevenueChart data={series} currency={currency} />
         </Card>
         <Card title={`Rolling MER (${range.label.toLowerCase()} window) vs target`} subtitle="Restated as platforms revise attribution.">

@@ -1,7 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminPageHeader, BackfillBadge, ClientStatusBadge, ConnectionStatusBadge } from "@/components/admin/ui";
-import { ArchiveClientToggle, ConnectAccountControl, DeleteClientControl, RunSourceNowButton, WooConnectControl } from "@/components/admin/row-actions";
+import {
+  ArchiveClientToggle,
+  BudgetControl,
+  ConnectAccountControl,
+  DeleteClientControl,
+  RunSourceNowButton,
+  WooConnectControl,
+} from "@/components/admin/row-actions";
 import { BackfillForm, type BackfillSourceRow } from "@/components/admin/backfill-form";
 import { Card } from "@/components/ui";
 import { getClient, getClientBackfillSummary, getGa4Properties, getGoogleAccounts, getMetaAccounts, getUsers } from "@/lib/admin-store";
@@ -144,6 +151,15 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
               }
             />
           )}
+        </Card>
+      </div>
+
+      <div className="mt-4">
+        <Card
+          title="Monthly ad budget"
+          subtitle="Flat recurring budget, applied to every month until changed. Drives the client dashboard's Run rate budget card (month-to-date spend vs. budget)."
+        >
+          <BudgetControl clientId={client.id} currentBudget={client.monthlyBudget} />
         </Card>
       </div>
 

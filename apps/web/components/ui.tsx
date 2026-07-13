@@ -172,6 +172,39 @@ export function RunRateCard({
   );
 }
 
+export function BudgetCard({
+  budget,
+  fmt,
+}: {
+  budget: { amount: number; spentMtd: number; pctSpent: number; pctRemaining: number };
+  fmt: (n: number) => string;
+}) {
+  const overBudget = budget.pctSpent > 1;
+  const barPct = Math.min(1, budget.pctSpent);
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Budget</p>
+        <span className={`text-[11px] tabular-nums ${overBudget ? "text-rose-400" : "text-slate-600"}`}>
+          {overBudget ? "Over budget" : `${fmtPct(budget.pctRemaining)} left`}
+        </span>
+      </div>
+      <p className={`mt-1 text-2xl font-bold tabular-nums ${overBudget ? "text-rose-400" : "text-slate-100"}`}>
+        {fmtPct(budget.pctSpent)}
+      </p>
+      <div className="mt-0.5 flex items-center gap-1.5">
+        <span className="text-[11px] text-slate-600">of monthly budget spent, month to date</span>
+      </div>
+      <div className="mt-3 h-1.5 w-full overflow-hidden rounded bg-slate-800">
+        <div className={`h-full rounded ${overBudget ? "bg-rose-500" : "bg-slate-100"}`} style={{ width: `${barPct * 100}%` }} />
+      </div>
+      <p className="mt-1.5 text-xs text-slate-500">
+        {fmt(budget.spentMtd)} of {fmt(budget.amount)} budget
+      </p>
+    </div>
+  );
+}
+
 /**
  * Always-visible 1D / 7D / 30D snapshot for a north-star metric, independent
  * of the page's range selector. Anchored to the latest complete day.

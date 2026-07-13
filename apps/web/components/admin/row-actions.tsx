@@ -15,6 +15,7 @@ import {
   saveWooConnectionAction,
   type SaveWooState,
   unarchiveClientAction,
+  updateClientBudgetAction,
 } from "@/lib/admin-actions";
 import { ConnectionStatusBadge } from "@/components/admin/ui";
 import type { AdminClient, ConnectablePlatform, ConnectionStatus } from "@/lib/admin-store";
@@ -101,6 +102,47 @@ export function ArchiveClientToggle({ clientId, status }: { clientId: string; st
     >
       {willArchive ? "Archive" : "Unarchive"}
     </button>
+  );
+}
+
+/** Flat recurring monthly ad-spend budget. Empty input clears it; the client's Run rate section then hides budget usage entirely. */
+export function BudgetControl({ clientId, currentBudget }: { clientId: string; currentBudget: number | null }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [value, setValue] = useState(currentBudget != null ? String(currentBudget) : "");
+
+  return (
+    <form
+      className="flex items-center gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const trimmed = value.trim();
+        const amount = trimmed === "" ? null : Number(trimmed);
+        if (amount !== null && (!Number.isFinite(amount) || amount < 0)) return;
+        startTransition(async () => {
+          await updateClientBudgetAction(clientId, amount);
+          router.refresh();
+        });
+      }}
+    >
+      <input
+        type="number"
+        min="0"
+        step="0.01"
+        value={value}
+        disabled={pending}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="No budget set"
+        className="w-40 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-200"
+      />
+      <button
+        type="submit"
+        disabled={pending}
+        className="rounded border border-slate-700 px-2.5 py-1 text-xs font-medium text-slate-300 hover:border-slate-600 disabled:opacity-50"
+      >
+        Save
+      </button>
+    </form>
   );
 }
 

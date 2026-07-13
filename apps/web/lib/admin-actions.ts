@@ -17,6 +17,7 @@ import {
   setUserPassword,
   startBackfill as startBackfillRecord,
   unarchiveClient,
+  updateClientBudget,
   type BackfillSourceKey,
   type ConnectablePlatform,
   type Role,
@@ -197,6 +198,10 @@ export async function archiveClientAction(clientId: string): Promise<void> {
 
 export async function unarchiveClientAction(clientId: string): Promise<void> {
   await unarchiveClient(clientId);
+}
+
+export async function updateClientBudgetAction(clientId: string, amount: number | null): Promise<void> {
+  await updateClientBudget(clientId, amount);
 }
 
 export async function deleteClientAction(clientId: string): Promise<void> {

@@ -274,9 +274,20 @@ export interface RunRateStat {
   daysInMonth: number;
 }
 
+export interface RunRateBudget {
+  amount: number;
+  spentMtd: number;
+  pctSpent: number;
+  /** Floored at 0: once spend passes the budget, there's nothing left, not a negative number. */
+  pctRemaining: number;
+}
+
 export interface RunRate {
   meta: RunRateStat;
   google: RunRateStat;
+  total: RunRateStat;
+  /** Null when the client has no monthly_ad_budget set -- budget UI is hidden entirely for that client. */
+  budget: RunRateBudget | null;
 }
 
 /**
@@ -287,7 +298,12 @@ export interface RunRate {
  * 31" the instant the calendar flips before any data exists for it.
  */
 export async function getRunRate(clientId: string): Promise<RunRate> {
-  const timezone = await getClientTimezone(clientId);
+  const clientRow = await getDb()
+    .selectFrom("dim_client")
+    .select(["timezone", "monthly_ad_budget"])
+    .where("client_id", "=", clientId)
+    .executeTakeFirst();
+  const timezone = clientRow?.timezone ?? "UTC";
   const latestDate = getLatestDate(timezone);
   const { monthStart, daysInMonth, dayOfMonth } = monthInfo(latestDate);
   const prevMonthEnd = addDays(monthStart, -1);
@@ -303,22 +319,44 @@ export async function getRunRate(clientId: string): Promise<RunRate> {
 
   const metaMtd = sumBy(thisMonth, (d) => d.metaSpend);
   const googleMtd = sumBy(thisMonth, (d) => d.googleSpend);
+  const totalMtd = r2(metaMtd + googleMtd);
+  const metaLastMonth = sumBy(lastMonth, (d) => d.metaSpend);
+  const googleLastMonth = sumBy(lastMonth, (d) => d.googleSpend);
+
+  const budgetAmount = clientRow?.monthly_ad_budget != null ? Number(clientRow.monthly_ad_budget) : null;
+  const budget: RunRateBudget | null =
+    budgetAmount != null && budgetAmount > 0
+      ? {
+          amount: budgetAmount,
+          spentMtd: totalMtd,
+          pctSpent: totalMtd / budgetAmount,
+          pctRemaining: Math.max(0, 1 - totalMtd / budgetAmount),
+        }
+      : null;
 
   return {
     meta: {
       monthToDateSpend: metaMtd,
       projectedSpend: project(metaMtd),
-      lastMonthSpend: sumBy(lastMonth, (d) => d.metaSpend),
+      lastMonthSpend: metaLastMonth,
       dayOfMonth,
       daysInMonth,
     },
     google: {
       monthToDateSpend: googleMtd,
       projectedSpend: project(googleMtd),
-      lastMonthSpend: sumBy(lastMonth, (d) => d.googleSpend),
+      lastMonthSpend: googleLastMonth,
       dayOfMonth,
       daysInMonth,
     },
+    total: {
+      monthToDateSpend: totalMtd,
+      projectedSpend: project(totalMtd),
+      lastMonthSpend: r2(metaLastMonth + googleLastMonth),
+      dayOfMonth,
+      daysInMonth,
+    },
+    budget,
   };
 }
 

@@ -25,6 +25,7 @@ export interface DimClientTable {
   status: Generated<"active" | "archived">;
   archived_at: Timestamp | null;
   created_at: Generated<Timestamp>;
+  monthly_ad_budget: Numeric | null;
 }
 
 export interface AppUserTable {

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import "../globals.css";
 
 export const metadata: Metadata = {
-  title: "ecomdash — Sign in",
+  title: "The Lean Commerce Data Room (beta) — Sign in",
   description: "Sign in to the e-commerce control dashboard",
 };
 

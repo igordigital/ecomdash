@@ -9,7 +9,7 @@ import { canManageIntegrations, type StaffRole } from "@/lib/admin-permissions";
 import "../globals.css";
 
 export const metadata: Metadata = {
-  title: "ecomdash — Admin",
+  title: "The Lean Commerce Data Room (beta) — Admin",
   description: "Multi-tenant admin panel: client onboarding, platform connections, user management",
 };
 
@@ -33,7 +33,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
         <div className="flex min-h-screen flex-col md:flex-row">
           <aside className="flex shrink-0 flex-col border-b border-slate-800 p-4 md:w-56 md:border-r md:border-b-0">
             <div className="mb-6 px-1 md:px-3">
-              <p className="text-sm font-bold text-slate-100">ecomdash</p>
+              <p className="text-sm font-bold text-slate-100">The Lean Commerce Data Room (beta)</p>
               <div className="mt-2 flex items-center gap-2">
                 <p className="text-xs text-slate-400">Admin panel</p>
                 <Badge tone="info">{role === "admin" ? "Admin" : "Analyst"}</Badge>

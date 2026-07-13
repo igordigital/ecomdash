@@ -6,7 +6,6 @@ import { Suspense } from "react";
 import { ClientSwitcher, ViewedClientName } from "@/components/client-switcher";
 import { Nav, NavFallback } from "@/components/nav";
 import { AdminLink, PreviewBanner } from "@/components/role-preview";
-import { Badge } from "@/components/ui";
 import { logoutAction } from "@/lib/admin-actions";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth";
 import { getClients, getClient } from "@/lib/admin-store";
@@ -15,7 +14,7 @@ import "../globals.css";
 const FALLBACK_CLIENT_NAME = "Dashboard";
 
 export const metadata: Metadata = {
-  title: "ecomdash",
+  title: "The Lean Commerce Data Room (beta)",
   description: "E-commerce control dashboard: blended MER, campaign health, site traffic",
 };
 
@@ -37,12 +36,11 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         <div className="flex min-h-screen flex-col md:flex-row">
           <aside className="flex shrink-0 flex-col border-b border-slate-800 p-4 md:w-56 md:border-r md:border-b-0">
             <div className="mb-4 flex items-center justify-between gap-2 px-1 md:mb-6 md:block md:px-3">
-              <p className="text-sm font-bold text-slate-100">ecomdash</p>
+              <p className="text-sm font-bold text-slate-100">The Lean Commerce Data Room (beta)</p>
               <div className="flex items-center gap-2 md:mt-2">
                 <Suspense fallback={<p className="text-xs text-slate-400">{clientName}</p>}>
                   <ViewedClientName clients={previewClients} fixedName={isStaff ? null : clientName} />
                 </Suspense>
-                <Badge tone="warn">Demo data</Badge>
               </div>
             </div>
             {isStaff ? (

@@ -11,14 +11,18 @@ import {
   runGa4NowAction,
   runGoogleAdsNowAction,
   runMetaNowAction,
+  runShopifyNowAction,
   runWooNowAction,
+  saveShopifyConnectionAction,
   saveWooConnectionAction,
+  type SaveShopifyState,
   type SaveWooState,
   unarchiveClientAction,
   updateClientBudgetAction,
 } from "@/lib/admin-actions";
 import { ConnectionStatusBadge } from "@/components/admin/ui";
 import type { AdminClient, ConnectablePlatform, ConnectionStatus } from "@/lib/admin-store";
+import { SHOPIFY_STATUS_OPTIONS } from "@/lib/shopify-constants";
 import { WOO_STATUS_OPTIONS } from "@/lib/woo-constants";
 
 export function AssignClientSelect({
@@ -299,6 +303,7 @@ const RUN_NOW_ACTIONS = {
   ga4: runGa4NowAction,
   meta: runMetaNowAction,
   woo: runWooNowAction,
+  shopify: runShopifyNowAction,
   google: runGoogleAdsNowAction,
 } as const;
 
@@ -444,5 +449,156 @@ export function WooConnectControl({
         ) : null}
       </div>
     </form>
+  );
+}
+
+const initialSaveShopifyState: SaveShopifyState = { ok: false };
+
+/**
+ * Same shape as WooConnectControl: Shopify is per-client, so the shop
+ * domain and a custom-app Admin API access token are typed in directly
+ * here and tested live before saving (see saveShopifyConnectionAction).
+ */
+export function ShopifyConnectControl({
+  clientId,
+  current,
+}: {
+  clientId: string;
+  current: { domain: string; includedStatuses?: string[]; status: ConnectionStatus } | null;
+}) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(!current);
+  const [statuses, setStatuses] = useState<string[]>(current?.includedStatuses ?? ["paid"]);
+  const [state, formAction, pending] = useActionState(saveShopifyConnectionAction, initialSaveShopifyState);
+
+  useEffect(() => {
+    if (state.ok) {
+      setEditing(false);
+      router.refresh();
+    }
+  }, [state, router]);
+
+  if (!editing && current) {
+    return (
+      <div className="flex items-center justify-between text-sm">
+        <div>
+          <p className="text-slate-200">Shopify · {current.domain}</p>
+          {current.includedStatuses ? <p className="text-xs text-slate-500">Revenue statuses: {current.includedStatuses.join(", ")}</p> : null}
+        </div>
+        <div className="flex items-center gap-2">
+          <ConnectionStatusBadge status={current.status} />
+          <button type="button" onClick={() => setEditing(true)} className="text-xs text-slate-400 hover:underline">
+            Update token
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <form action={formAction} className="grid gap-3">
+      <input type="hidden" name="clientId" value={clientId} />
+      <label className="grid gap-1 text-sm">
+        <span className="text-slate-400">Shop domain</span>
+        <input
+          name="domain"
+          defaultValue={current?.domain ?? ""}
+          placeholder="pharm2u.myshopify.com"
+          className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+        />
+      </label>
+      <label className="grid gap-1 text-sm">
+        <span className="text-slate-400">Admin API access token</span>
+        <input
+          name="accessToken"
+          type="password"
+          placeholder="shpat_..."
+          className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+        />
+      </label>
+      {current ? (
+        <p className="text-[11px] text-slate-600">
+          Shopify never lets us show you a saved token again, so it&apos;s required every time you save here, even if
+          you&apos;re only changing the revenue statuses below.
+        </p>
+      ) : (
+        <p className="text-[11px] text-slate-600">
+          Create a custom app in Shopify admin (Settings → Apps and sales channels → Develop apps), grant it
+          read_orders and read_products, then install it and copy the Admin API access token here.
+        </p>
+      )}
+      <div>
+        <p className="mb-1.5 text-sm text-slate-400">Order statuses that count toward revenue</p>
+        <div className="flex flex-wrap gap-3">
+          {SHOPIFY_STATUS_OPTIONS.map((opt) => (
+            <label key={opt.value} className="flex items-center gap-1.5 text-xs text-slate-300">
+              <input
+                type="checkbox"
+                name="includedStatuses"
+                value={opt.value}
+                checked={statuses.includes(opt.value)}
+                onChange={(e) => setStatuses((s) => (e.target.checked ? [...s, opt.value] : s.filter((v) => v !== opt.value)))}
+              />
+              {opt.label}
+            </label>
+          ))}
+        </div>
+      </div>
+      {state.error ? <p className="text-sm text-red-400">{state.error}</p> : null}
+      <div className="flex items-center gap-3">
+        <button type="submit" disabled={pending} className="w-fit rounded bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500 disabled:opacity-50">
+          {pending ? "Testing connection…" : "Save and test connection"}
+        </button>
+        {current ? (
+          <button type="button" disabled={pending} onClick={() => setEditing(false)} className="text-xs text-slate-500 hover:underline">
+            Cancel
+          </button>
+        ) : null}
+      </div>
+    </form>
+  );
+}
+
+/**
+ * The store is per-client (never pre-authorized at the agency level), and
+ * unlike the other sources it can be either platform, so a client with no
+ * store connected yet gets a Shopify/WooCommerce picker before either
+ * connect form appears. Once connected, only that platform's control shows.
+ */
+export function StoreConnectControl({
+  clientId,
+  current,
+}: {
+  clientId: string;
+  current: { type: "shopify" | "woocommerce"; domain: string; includedStatuses?: string[]; status: ConnectionStatus } | null;
+}) {
+  const [pickedType, setPickedType] = useState<"shopify" | "woocommerce">("shopify");
+
+  if (current) {
+    return current.type === "shopify" ? (
+      <ShopifyConnectControl clientId={clientId} current={current} />
+    ) : (
+      <WooConnectControl clientId={clientId} current={current} />
+    );
+  }
+
+  return (
+    <div className="grid gap-3">
+      <div className="flex gap-2">
+        {(["shopify", "woocommerce"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setPickedType(t)}
+            className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium ${
+              pickedType === t ? "border-sky-600 bg-sky-950 text-sky-300" : "border-slate-700 text-slate-400 hover:border-slate-600"
+            }`}
+          >
+            {t === "shopify" ? "Shopify" : "WooCommerce"}
+          </button>
+        ))}
+      </div>
+      {pickedType === "shopify" ? <ShopifyConnectControl clientId={clientId} current={null} /> : <WooConnectControl clientId={clientId} current={null} />}
+    </div>
   );
 }

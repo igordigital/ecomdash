@@ -23,6 +23,7 @@ import { getClientTimezone, getLatestDate } from "./dashboard-data";
 import { runPendingGa4Jobs } from "./ga4-ingest";
 import { runPendingMetaJobs } from "./meta-ingest";
 import { runPendingGoogleAdsJobs } from "./google-ads-ingest";
+import { runPendingShopifyJobs } from "./shopify-ingest";
 import { runPendingWooJobs } from "./woo-ingest";
 
 async function queueDay(clientId: string, source: string, date: string): Promise<void> {
@@ -91,7 +92,9 @@ export async function runDailySync(): Promise<DailySyncSummary> {
     if (client.store?.type === "woocommerce" && client.store.status === "connected") {
       results.push(await syncSource(client, "WooCommerce", "woo", date, () => runPendingWooJobs(client.id)));
     }
-    // Google Ads not connected, or store is Shopify: nothing to run yet, matches the rest of this app.
+    if (client.store?.type === "shopify" && client.store.status === "connected") {
+      results.push(await syncSource(client, "Shopify", "shopify", date, () => runPendingShopifyJobs(client.id)));
+    }
   }
 
   return { clientsTotal: clients.length, clientsProcessed: active.length, results };

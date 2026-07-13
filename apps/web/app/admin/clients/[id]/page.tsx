@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AdminPageHeader, BackfillBadge, ClientStatusBadge, ConnectionStatusBadge } from "@/components/admin/ui";
+import { AdminPageHeader, BackfillBadge, ClientStatusBadge } from "@/components/admin/ui";
 import {
   ArchiveClientToggle,
   BudgetControl,
   ConnectAccountControl,
   DeleteClientControl,
   RunSourceNowButton,
-  WooConnectControl,
+  StoreConnectControl,
 } from "@/components/admin/row-actions";
 import { BackfillForm, type BackfillSourceRow } from "@/components/admin/backfill-form";
 import { Card } from "@/components/ui";
@@ -134,23 +134,14 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         </Card>
 
         <Card title="Store">
-          {client.store?.type === "shopify" ? (
-            <div className="flex items-center justify-between text-sm">
-              <div>
-                <p className="text-slate-200">Shopify · {client.store.domain}</p>
-              </div>
-              <ConnectionStatusBadge status={client.store.status} />
-            </div>
-          ) : (
-            <WooConnectControl
-              clientId={client.id}
-              current={
-                client.store?.type === "woocommerce"
-                  ? { domain: client.store.domain, includedStatuses: client.store.includedStatuses, status: client.store.status }
-                  : null
-              }
-            />
-          )}
+          <StoreConnectControl
+            clientId={client.id}
+            current={
+              client.store
+                ? { type: client.store.type, domain: client.store.domain, includedStatuses: client.store.includedStatuses, status: client.store.status }
+                : null
+            }
+          />
         </Card>
       </div>
 
@@ -187,8 +178,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
               <div className="mt-3 flex items-center justify-between gap-4">
                 <p className="text-xs text-slate-500">
                   Queuing writes day-grain rows to ingest_jobs, tracked per (client, source, date) so it&apos;s
-                  resumable. GA4, Meta, Google Ads, and WooCommerce have real processors (buttons on the right);
-                  Shopify queues but won&apos;t move until that connector is built.
+                  resumable. GA4, Meta, Google Ads, WooCommerce, and Shopify all have real processors (buttons on
+                  the right).
                 </p>
                 <div className="flex shrink-0 flex-col items-end gap-2">
                   <RunSourceNowButton clientId={client.id} source="ga4" label="Run GA4 now" disabled={!client.ga4} />
@@ -199,6 +190,12 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                     source="woo"
                     label="Run WooCommerce now"
                     disabled={client.store?.type !== "woocommerce"}
+                  />
+                  <RunSourceNowButton
+                    clientId={client.id}
+                    source="shopify"
+                    label="Run Shopify now"
+                    disabled={client.store?.type !== "shopify"}
                   />
                 </div>
               </div>

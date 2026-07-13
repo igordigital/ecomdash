@@ -624,6 +624,19 @@ export async function saveWooConnection(
     .execute();
 }
 
+/** Same shape as saveWooConnection: a custom-app access token is never readable back from Shopify once granted, so it's always overwritten in full on save. */
+export async function saveShopifyConnection(
+  clientId: string,
+  input: { domain: string; accessToken: string; includedStatuses: string[] },
+): Promise<void> {
+  const config = { domain: input.domain, accessToken: input.accessToken, includedStatuses: input.includedStatuses };
+  await getDb()
+    .insertInto("client_credentials")
+    .values({ client_id: clientId, source: "shopify", config, status: "active" })
+    .onConflict((oc) => oc.columns(["client_id", "source"]).doUpdateSet({ config, status: "active", updated_at: new Date() }))
+    .execute();
+}
+
 export interface NewClientInput {
   name: string;
   timezone: string;
@@ -632,7 +645,7 @@ export interface NewClientInput {
   metaAccountId: string | null;
   ga4PropertyId: string | null;
   store:
-    | { type: "shopify"; domain: string }
+    | { type: "shopify"; domain: string; accessToken: string; includedStatuses: string[] }
     | { type: "woocommerce"; domain: string; consumerKey: string; consumerSecret: string; includedStatuses: string[] }
     | null;
 }
@@ -660,7 +673,7 @@ export async function createClientRecord(input: NewClientInput): Promise<AdminCl
       source: input.store.type === "shopify" ? "shopify" : "woo",
       config:
         input.store.type === "shopify"
-          ? { domain: input.store.domain }
+          ? { domain: input.store.domain, accessToken: input.store.accessToken, includedStatuses: input.store.includedStatuses }
           : {
               domain: input.store.domain,
               consumerKey: input.store.consumerKey,

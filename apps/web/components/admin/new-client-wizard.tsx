@@ -4,6 +4,7 @@ import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClientAction, type CreateClientState } from "@/lib/admin-actions";
 import type { Ga4Property, GoogleAdsAccount, MetaAdAccount } from "@/lib/admin-store";
+import { SHOPIFY_STATUS_OPTIONS } from "@/lib/shopify-constants";
 import { WOO_STATUS_OPTIONS } from "@/lib/woo-constants";
 import { Badge } from "@/components/ui";
 
@@ -18,7 +19,8 @@ interface WizardState {
   ga4PropertyId: string | null;
   storeType: "shopify" | "woocommerce" | null;
   shopifyDomain: string;
-  shopifyConnected: boolean;
+  shopifyAccessToken: string;
+  shopifyStatuses: string[];
   wooDomain: string;
   wooKey: string;
   wooSecret: string;
@@ -34,7 +36,8 @@ const INITIAL: WizardState = {
   ga4PropertyId: null,
   storeType: null,
   shopifyDomain: "",
-  shopifyConnected: false,
+  shopifyAccessToken: "",
+  shopifyStatuses: ["paid"],
   wooDomain: "",
   wooKey: "",
   wooSecret: "",
@@ -242,27 +245,46 @@ export function NewClientWizard({
                   <span className="text-slate-400">Shop domain</span>
                   <input
                     value={state.shopifyDomain}
-                    onChange={(e) => patch({ shopifyDomain: e.target.value, shopifyConnected: false })}
+                    onChange={(e) => patch({ shopifyDomain: e.target.value })}
                     placeholder="acme-outdoors.myshopify.com"
                     className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
                   />
                 </label>
-                {state.shopifyConnected ? (
-                  <Badge tone="good">Connected via OAuth</Badge>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={!state.shopifyDomain.trim()}
-                    onClick={() => patch({ shopifyConnected: true })}
-                    className="w-fit rounded bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-40"
-                  >
-                    Authorize with Shopify
-                  </button>
-                )}
+                <label className="grid gap-1 text-sm">
+                  <span className="text-slate-400">Admin API access token</span>
+                  <input
+                    value={state.shopifyAccessToken}
+                    onChange={(e) => patch({ shopifyAccessToken: e.target.value })}
+                    type="password"
+                    placeholder="shpat_..."
+                    className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+                  />
+                </label>
                 <p className="text-[11px] text-slate-600">
-                  Real flow: Shopify Admin OAuth, installed as a private app; webhooks for orders/create,
-                  orders/updated, refunds/create, plus a daily reconciliation pull.
+                  Create a custom app in Shopify admin (Settings → Apps and sales channels → Develop apps), grant it
+                  read_orders and read_products, then install it and copy the Admin API access token here.
                 </p>
+                <div>
+                  <p className="mb-1.5 text-sm text-slate-400">Order statuses that count toward revenue</p>
+                  <div className="flex flex-wrap gap-3">
+                    {SHOPIFY_STATUS_OPTIONS.map((opt) => (
+                      <label key={opt.value} className="flex items-center gap-1.5 text-xs text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={state.shopifyStatuses.includes(opt.value)}
+                          onChange={(e) =>
+                            patch({
+                              shopifyStatuses: e.target.checked
+                                ? [...state.shopifyStatuses, opt.value]
+                                : state.shopifyStatuses.filter((s) => s !== opt.value),
+                            })
+                          }
+                        />
+                        {opt.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
               </div>
             ) : null}
 
@@ -382,6 +404,10 @@ export function NewClientWizard({
             <input type="hidden" name="ga4PropertyId" value={state.ga4PropertyId ?? ""} />
             <input type="hidden" name="storeType" value={state.storeType ?? ""} />
             <input type="hidden" name="shopifyDomain" value={state.shopifyDomain} />
+            <input type="hidden" name="shopifyAccessToken" value={state.shopifyAccessToken} />
+            {state.shopifyStatuses.map((s) => (
+              <input key={s} type="hidden" name="shopifyStatuses" value={s} />
+            ))}
             <input type="hidden" name="wooDomain" value={state.wooDomain} />
             <input type="hidden" name="wooKey" value={state.wooKey} />
             <input type="hidden" name="wooSecret" value={state.wooSecret} />

@@ -13,6 +13,7 @@ import {
   findUserByEmail,
   getUser,
   removeUser as removeUserRecord,
+  saveShopifyConnection,
   saveWooConnection,
   setUserPassword,
   startBackfill as startBackfillRecord,
@@ -24,8 +25,10 @@ import {
 } from "./admin-store";
 import { runPendingGa4Jobs } from "./ga4-ingest";
 import { runPendingMetaJobs } from "./meta-ingest";
+import { runPendingShopifyJobs } from "./shopify-ingest";
 import { runPendingWooJobs } from "./woo-ingest";
 import { runPendingGoogleAdsJobs } from "./google-ads-ingest";
+import { normalizeShopifyDomain, testShopifyConnection } from "./shopify-api";
 import { normalizeWooSiteUrl, testWooConnection } from "./woo-api";
 
 const SOURCE_LABELS: Record<BackfillSourceKey, string> = {
@@ -62,8 +65,22 @@ export async function createClientAction(
 
   let store: import("./admin-store").NewClientInput["store"] = null;
   if (storeType === "shopify") {
-    const domain = String(formData.get("shopifyDomain") ?? "").trim();
-    if (domain) store = { type: "shopify", domain };
+    const domainRaw = String(formData.get("shopifyDomain") ?? "").trim();
+    const accessToken = String(formData.get("shopifyAccessToken") ?? "").trim();
+    const includedStatuses = formData.getAll("shopifyStatuses").map(String);
+    if (domainRaw) {
+      if (!accessToken) {
+        return { ok: false, error: "Shopify admin API access token is required to connect the store." };
+      }
+      const domain = normalizeShopifyDomain(domainRaw);
+      try {
+        await testShopifyConnection({ domain, accessToken });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return { ok: false, error: `Could not connect to Shopify: ${message}` };
+      }
+      store = { type: "shopify", domain, accessToken, includedStatuses };
+    }
   } else if (storeType === "woocommerce") {
     const domain = String(formData.get("wooDomain") ?? "").trim();
     const consumerKey = String(formData.get("wooKey") ?? "").trim();
@@ -185,8 +202,10 @@ export async function startBackfillAction(_prev: BackfillState, formData: FormDa
       void runPendingGoogleAdsJobs(clientId).catch((err) => console.error("Google Ads job run failed for client", clientId, err));
     } else if (key === "store" && storeType === "woocommerce") {
       void runPendingWooJobs(clientId).catch((err) => console.error("WooCommerce job run failed for client", clientId, err));
+    } else if (key === "store" && storeType === "shopify") {
+      void runPendingShopifyJobs(clientId).catch((err) => console.error("Shopify job run failed for client", clientId, err));
     }
-    // "store" when storeType is "shopify" or null: no real processor yet, rows stay queued only.
+    // "store" when storeType is null (no store connected yet): rows stay queued only.
   }
 
   return { ok: true, message: `Queued and started: ${requested.map((s) => SOURCE_LABELS[s]).join(", ")}.` };
@@ -251,6 +270,14 @@ export async function runWooNowAction(clientId: string): Promise<{ ok: true }> {
   return { ok: true };
 }
 
+/** Same fire-and-forget shape as runGa4NowAction. */
+export async function runShopifyNowAction(clientId: string): Promise<{ ok: true }> {
+  void runPendingShopifyJobs(clientId).catch((err) => {
+    console.error("Shopify job run failed for client", clientId, err);
+  });
+  return { ok: true };
+}
+
 export interface SaveWooState {
   ok: boolean;
   error?: string;
@@ -284,6 +311,40 @@ export async function saveWooConnectionAction(_prev: SaveWooState, formData: For
   }
 
   await saveWooConnection(clientId, { siteUrl, consumerKey, consumerSecret, includedStatuses });
+  return { ok: true };
+}
+
+export interface SaveShopifyState {
+  ok: boolean;
+  error?: string;
+}
+
+/**
+ * Tests the given Shopify custom-app access token against the live store
+ * before saving, same reasoning as saveWooConnectionAction. Always
+ * overwrites the token, since Shopify never lets us read a saved token back
+ * to prefill the edit form.
+ */
+export async function saveShopifyConnectionAction(_prev: SaveShopifyState, formData: FormData): Promise<SaveShopifyState> {
+  const clientId = String(formData.get("clientId") ?? "");
+  const domainRaw = String(formData.get("domain") ?? "").trim();
+  const accessToken = String(formData.get("accessToken") ?? "").trim();
+  const includedStatuses = formData.getAll("includedStatuses").map(String);
+
+  if (!clientId) return { ok: false, error: "Missing client." };
+  if (!domainRaw) return { ok: false, error: "Shop domain is required." };
+  if (!accessToken) return { ok: false, error: "Admin API access token is required." };
+  if (includedStatuses.length === 0) return { ok: false, error: "Select at least one order status to count toward revenue." };
+
+  const domain = normalizeShopifyDomain(domainRaw);
+  try {
+    await testShopifyConnection({ domain, accessToken });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: `Could not connect to Shopify: ${message}` };
+  }
+
+  await saveShopifyConnection(clientId, { domain, accessToken, includedStatuses });
   return { ok: true };
 }
 

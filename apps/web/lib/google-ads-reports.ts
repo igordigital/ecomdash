@@ -77,7 +77,11 @@ export interface GoogleAdsCampaignReportRow {
 interface AdGroupRow {
   campaign: { id: string; name: string };
   adGroup: { id: string; name: string };
-  metrics: {
+  // Google Ads omits `metrics` entirely (not just individual fields) when none of the
+  // requested metrics have a reportable value for that row -- confirmed against the real
+  // API, where most campaign rows on a given day have no `metrics` key at all. Every read
+  // below must tolerate this being undefined, not just its individual sub-fields.
+  metrics?: {
     costMicros?: string;
     impressions?: string;
     clicks?: string;
@@ -89,7 +93,7 @@ interface AdGroupRow {
 
 interface CampaignImpressionShareRow {
   campaign: { id: string };
-  metrics: { searchImpressionShare?: number };
+  metrics?: { searchImpressionShare?: number };
 }
 
 /** search_impression_share only exists on the campaign resource (Search campaigns only), not ad_group -- fetched separately and merged in by campaign id. */
@@ -101,7 +105,7 @@ async function fetchImpressionShareByCampaign(accessToken: string, customerId: s
   );
   const byCampaign = new Map<string, number>();
   for (const r of rows) {
-    if (typeof r.metrics.searchImpressionShare === "number") {
+    if (typeof r.metrics?.searchImpressionShare === "number") {
       byCampaign.set(r.campaign.id, r.metrics.searchImpressionShare);
     }
   }
@@ -124,11 +128,11 @@ export async function fetchGoogleAdsCampaignReport(accessToken: string, customer
     campaignName: r.campaign.name,
     adGroupId: r.adGroup.id,
     adGroupName: r.adGroup.name,
-    spend: Number(r.metrics.costMicros ?? 0) / 1_000_000,
-    impressions: Number(r.metrics.impressions ?? 0),
-    clicks: Number(r.metrics.clicks ?? 0),
-    conversions: r.metrics.conversions ?? 0,
-    conversionValue: r.metrics.conversionsValue ?? 0,
+    spend: Number(r.metrics?.costMicros ?? 0) / 1_000_000,
+    impressions: Number(r.metrics?.impressions ?? 0),
+    clicks: Number(r.metrics?.clicks ?? 0),
+    conversions: r.metrics?.conversions ?? 0,
+    conversionValue: r.metrics?.conversionsValue ?? 0,
     impressionShare: impressionShareByCampaign.get(r.campaign.id) ?? null,
   }));
 }
